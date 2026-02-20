@@ -1,9 +1,10 @@
 'use strict';
 
 const { search } = require('../search');
-const { buildColorSearchPattern, buildColorExtractionRegex, CSS_COLOR_PROPERTIES, JS_COLOR_PROPERTIES } = require('../color-patterns');
+const { buildColorSearchPattern, CSS_COLOR_PROPERTIES, JS_COLOR_PROPERTIES } = require('../color-patterns');
 const { NAMED_COLORS, NAMED_COLOR_SET } = require('../css-named-colors');
 const { classifyColor, normalizeToHex } = require('../color-utils');
+const { classifyContext, contextLabel, isActionable, clearCache } = require('../context-classifier');
 
 /**
  * Find all hardcoded color values in source files.
@@ -12,6 +13,7 @@ const { classifyColor, normalizeToHex } = require('../color-utils');
  * color(), and optionally CSS named colors.
  */
 function findColors(paths, options) {
+  clearCache();
   const results = [];
 
   // 1. Search for function-based and hex color values
@@ -22,8 +24,7 @@ function findColors(paths, options) {
     fileTypes: options.fileTypes,
   });
 
-  // Post-process: extract and validate color values from matched lines
-  const extractionRegex = buildColorExtractionRegex();
+  // Post-process: validate color values from matched lines
   for (const result of rawResults) {
     const match = result.match.trim();
     const type = classifyColor(match);
@@ -41,6 +42,7 @@ function findColors(paths, options) {
     // Skip matches that are clearly type annotations or function signatures
     if (/:\s*(string|number|boolean|void|any)\b/.test(result.text) && !result.text.includes("'") && !result.text.includes('"')) continue;
 
+    const ctx = classifyContext(result);
     results.push({
       file: result.file,
       line: result.line,
@@ -48,7 +50,10 @@ function findColors(paths, options) {
       value: match,
       type,
       hex: normalizeToHex(match),
-      context: result.text.trim(),
+      lineText: result.text.trim(),
+      context: ctx,
+      contextLabel: contextLabel(ctx),
+      actionable: isActionable(ctx),
     });
   }
 
@@ -136,42 +141,61 @@ function findNamedColors(paths, options) {
  * Output results in JSON format.
  */
 function outputJson(results) {
-  const grouped = groupByFile(results);
+  const actionable = results.filter(r => r.actionable);
+  const skipped = results.filter(r => !r.actionable);
   const output = {
     command: 'colors',
     summary: {
       totalColors: results.length,
-      totalFiles: Object.keys(grouped).length,
+      actionable: actionable.length,
+      skipped: skipped.length,
+      totalFiles: new Set(results.map(r => r.file)).size,
       byType: countByType(results),
+      skippedByContext: countByKey(skipped, 'context'),
     },
-    results: grouped,
+    actionable: groupByFile(actionable),
+    skipped: groupByFile(skipped),
   };
   console.log(JSON.stringify(output, null, 2));
 }
 
-/**
- * Output results in human/Claude-readable text format.
- */
 function outputText(results) {
   if (results.length === 0) {
     console.log('No hardcoded color values found.');
     return;
   }
 
-  const grouped = groupByFile(results);
-  const fileCount = Object.keys(grouped).length;
+  const actionable = results.filter(r => r.actionable);
+  const skipped = results.filter(r => !r.actionable);
+  const fileCount = new Set(results.map(r => r.file)).size;
   const typeCount = countByType(results);
 
   console.log(`\n=== Hardcoded Colors ===`);
   console.log(`Found ${results.length} hardcoded color values in ${fileCount} files`);
+  console.log(`Actionable: ${actionable.length} | Skipped: ${skipped.length}`);
   console.log(`Types: ${Object.entries(typeCount).map(([k, v]) => `${k}(${v})`).join(', ')}\n`);
 
-  for (const [file, fileResults] of Object.entries(grouped)) {
-    console.log(`FILE: ${file}`);
-    for (const r of fileResults) {
-      const hex = r.hex ? ` → ${r.hex}` : '';
-      console.log(`  L${r.line}:${r.column}  ${r.value}  (${r.type}${hex})`);
-      console.log(`    ${r.context}`);
+  // Actionable results first
+  if (actionable.length > 0) {
+    const grouped = groupByFile(actionable);
+    for (const [file, fileResults] of Object.entries(grouped)) {
+      console.log(`FILE: ${file}`);
+      for (const r of fileResults) {
+        const hex = r.hex ? ` -> ${r.hex}` : '';
+        console.log(`  L${r.line}:${r.column}  ${r.value}  (${r.type}${hex})`);
+        console.log(`    ${r.lineText}`);
+      }
+      console.log('');
+    }
+  }
+
+  // Collapsed summary of skipped
+  if (skipped.length > 0) {
+    const byCtx = countByKey(skipped, 'contextLabel');
+    console.log(`--- Skipped ${skipped.length} non-actionable colors ---`);
+    for (const [ctx, count] of Object.entries(byCtx)) {
+      const files = new Set(skipped.filter(r => r.contextLabel === ctx).map(r => r.file));
+      console.log(`  [${ctx}] ${count} colors in ${files.size} files`);
     }
     console.log('');
   }
@@ -190,6 +214,15 @@ function countByType(results) {
   const counts = {};
   for (const r of results) {
     counts[r.type] = (counts[r.type] || 0) + 1;
+  }
+  return counts;
+}
+
+function countByKey(results, key) {
+  const counts = {};
+  for (const r of results) {
+    const val = r[key] || 'unknown';
+    counts[val] = (counts[val] || 0) + 1;
   }
   return counts;
 }
