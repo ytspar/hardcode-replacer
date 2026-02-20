@@ -1,0 +1,27 @@
+{
+  "name": "hardcode-replacer",
+  "version": "1.0.0",
+  "description": "CLI tool for finding hardcoded colors, Tailwind classes, and extractable patterns in codebases",
+  "main": "src/cli.js",
+  "bin": {
+    "hardcode-replacer": "./bin/hardcode-replacer.js"
+  },
+  "scripts": {
+    "start": "node bin/hardcode-replacer.js"
+  },
+  "keywords": [
+    "css",
+    "tailwind",
+    "colors",
+    "refactoring",
+    "hardcoded",
+    "design-tokens"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "commander": "^13.1.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
