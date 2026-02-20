@@ -8,22 +8,26 @@ const { search } = require('../search');
  *
  * Approach:
  * 1. Extract all className strings from JSX/HTML files
- * 2. Normalize class strings (sort alphabetically, deduplicate)
- * 3. Count occurrences of each normalized pattern
- * 4. Report patterns appearing >= minCount times
+ * 2. Also extract from cn(), clsx(), twMerge(), cva() calls
+ * 3. Normalize class strings (sort alphabetically, deduplicate)
+ * 4. Count occurrences of each normalized pattern
+ * 5. Detect patterns that are subsets of larger patterns
+ * 6. Report patterns appearing >= minCount times
  */
 function findPatterns(paths, options) {
   const minCount = parseInt(options.minCount) || 2;
   const minClasses = parseInt(options.minClasses) || 2;
   const searchPaths = paths.length > 0 ? paths : ['.'];
 
-  // 1. Find all className and class attribute occurrences
+  // 1. Find all className/class and cn()/clsx()/twMerge() occurrences
   const classResults = findClassAttributes(searchPaths, options);
+  const fnResults = findClassNameFunctions(searchPaths, options);
+  const allResults = [...classResults, ...fnResults];
 
   // 2. Normalize and count
   const patternMap = new Map(); // normalized string -> { count, locations, original }
 
-  for (const result of classResults) {
+  for (const result of allResults) {
     const classes = extractClassList(result.classString);
     if (classes.length < minClasses) continue;
 
@@ -48,6 +52,7 @@ function findPatterns(paths, options) {
       column: result.column,
       original: result.classString,
       context: result.context,
+      source: result.source || 'className',
     });
   }
 
@@ -61,13 +66,16 @@ function findPatterns(paths, options) {
       return scoreB - scoreA;
     });
 
-  // 4. Also find frequently used individual class subsets
+  // 4. Find frequently used individual class subsets
   const subPatterns = findCommonSubsets(patternMap, minCount, minClasses);
 
+  // 5. Detect subset relationships between found patterns
+  const subsetRelations = findSubsetRelations(patterns);
+
   if (options.format === 'json') {
-    outputJson(patterns, subPatterns, minCount, minClasses);
+    outputJson(patterns, subPatterns, subsetRelations, minCount, minClasses);
   } else {
-    outputText(patterns, subPatterns, minCount, minClasses);
+    outputText(patterns, subPatterns, subsetRelations, minCount, minClasses);
   }
 }
 
@@ -112,7 +120,60 @@ function findClassAttributes(searchPaths, options) {
         column: result.column,
         classString,
         context: result.text.trim(),
+        source: 'className',
       });
+    }
+  }
+
+  return results;
+}
+
+/**
+ * Find cn(), clsx(), twMerge(), cva() function calls with string arguments.
+ * Extracts static string class lists from these utility functions.
+ */
+function findClassNameFunctions(searchPaths, options) {
+  const results = [];
+
+  // Match cn("...", "..."), clsx("..."), twMerge("..."), cva("...")
+  const fnPatterns = [
+    '(?:cn|clsx|twMerge|cva)\\(\\s*["\']([^"\']*)["\']',
+    '(?:cn|clsx|twMerge|cva)\\([^)]*["\']([^"\']+)["\']',
+  ];
+
+  for (const pattern of fnPatterns) {
+    const rawResults = search(pattern, searchPaths, {
+      include: options.include,
+      exclude: options.exclude,
+      caseSensitive: true,
+    });
+
+    for (const result of rawResults) {
+      const match = result.match || result.text;
+
+      // Extract all quoted string arguments
+      const stringArgs = match.match(/["']([^"']+)["']/g);
+      if (!stringArgs) continue;
+
+      // Skip if in a comment
+      const trimmedText = result.text.trimStart();
+      if (trimmedText.startsWith('//') || trimmedText.startsWith('*') || trimmedText.startsWith('{/*')) continue;
+
+      for (const arg of stringArgs) {
+        const classString = arg.slice(1, -1).trim();
+        if (!classString || classString.includes('${')) continue;
+        // Must look like Tailwind/CSS classes (has dashes or spaces)
+        if (!classString.includes('-') && !classString.includes(' ')) continue;
+
+        results.push({
+          file: result.file,
+          line: result.line,
+          column: result.column,
+          classString,
+          context: result.text.trim(),
+          source: 'cn/clsx',
+        });
+      }
     }
   }
 
@@ -137,10 +198,8 @@ function findCommonSubsets(patternMap, minCount, minClasses) {
   const classFreq = new Map();
 
   for (const entry of patternMap.values()) {
-    for (const loc of entry.locations) {
-      for (const cls of entry.classes) {
-        classFreq.set(cls, (classFreq.get(cls) || 0) + 1);
-      }
+    for (const cls of entry.classes) {
+      classFreq.set(cls, (classFreq.get(cls) || 0) + entry.count);
     }
   }
 
@@ -170,7 +229,40 @@ function findCommonSubsets(patternMap, minCount, minClasses) {
     .map(([pattern, count]) => ({ pattern, count }));
 }
 
-function outputJson(patterns, subPatterns, minCount, minClasses) {
+/**
+ * Find patterns that are subsets of other patterns.
+ * If pattern A's classes are a subset of pattern B's classes,
+ * and both appear frequently, they can share a base extraction.
+ */
+function findSubsetRelations(patterns) {
+  const relations = [];
+
+  for (let i = 0; i < patterns.length; i++) {
+    const a = new Set(patterns[i].classes);
+
+    for (let j = 0; j < patterns.length; j++) {
+      if (i === j) continue;
+      const b = new Set(patterns[j].classes);
+
+      // Check if a is a proper subset of b
+      if (a.size < b.size && [...a].every(cls => b.has(cls))) {
+        relations.push({
+          subset: patterns[i].normalized,
+          superset: patterns[j].normalized,
+          subsetCount: patterns[i].count,
+          supersetCount: patterns[j].count,
+          sharedClasses: [...a],
+          extraClasses: [...b].filter(cls => !a.has(cls)),
+        });
+      }
+    }
+  }
+
+  // Deduplicate and return top relations
+  return relations.slice(0, 10);
+}
+
+function outputJson(patterns, subPatterns, subsetRelations, minCount, minClasses) {
   const output = {
     command: 'patterns',
     summary: {
@@ -178,6 +270,7 @@ function outputJson(patterns, subPatterns, minCount, minClasses) {
       minCount,
       minClasses,
       totalLocations: patterns.reduce((sum, p) => sum + p.count, 0),
+      subsetRelations: subsetRelations.length,
     },
     patterns: patterns.map(p => ({
       normalized: p.normalized,
@@ -186,12 +279,13 @@ function outputJson(patterns, subPatterns, minCount, minClasses) {
       impactScore: p.count * p.classCount,
       locations: p.locations,
     })),
+    subsetRelations,
     frequentSubsets: subPatterns,
   };
   console.log(JSON.stringify(output, null, 2));
 }
 
-function outputText(patterns, subPatterns, minCount, minClasses) {
+function outputText(patterns, subPatterns, subsetRelations, minCount, minClasses) {
   if (patterns.length === 0) {
     console.log(`No repeated class patterns found (min ${minCount} occurrences, min ${minClasses} classes).`);
     return;
@@ -201,7 +295,7 @@ function outputText(patterns, subPatterns, minCount, minClasses) {
 
   console.log(`\n=== Repeated Class Patterns ===`);
   console.log(`Found ${patterns.length} repeated patterns across ${totalLocs} locations`);
-  console.log(`Criteria: ≥${minCount} occurrences, ≥${minClasses} classes\n`);
+  console.log(`Criteria: >=${minCount} occurrences, >=${minClasses} classes\n`);
 
   for (let i = 0; i < patterns.length; i++) {
     const p = patterns[i];
@@ -209,15 +303,35 @@ function outputText(patterns, subPatterns, minCount, minClasses) {
 
     console.log(`${i + 1}. "${p.normalized}"`);
     console.log(`   Classes: ${p.classCount} | Occurrences: ${p.count} | Impact score: ${impact}`);
+
+    // Show sources (className vs cn/clsx)
+    const sources = new Set(p.locations.map(l => l.source));
+    if (sources.size > 1 || sources.has('cn/clsx')) {
+      console.log(`   Sources: ${[...sources].join(', ')}`);
+    }
+
     console.log(`   Consider: CVA variant, @apply directive, or component extraction`);
     console.log(`   Locations:`);
     for (const loc of p.locations) {
-      console.log(`     ${loc.file}:${loc.line}:${loc.column}`);
+      const sourceTag = loc.source === 'cn/clsx' ? ' [cn/clsx]' : '';
+      console.log(`     ${loc.file}:${loc.line}:${loc.column}${sourceTag}`);
       if (loc.original !== p.normalized) {
         console.log(`       original: "${loc.original}"`);
       }
     }
     console.log('');
+  }
+
+  // Subset relationships
+  if (subsetRelations.length > 0) {
+    console.log(`--- Subset Relationships ---`);
+    console.log(`These patterns share a common base that could be extracted:\n`);
+    for (const rel of subsetRelations) {
+      console.log(`  Base: "${rel.subset}" (${rel.subsetCount}x)`);
+      console.log(`    is subset of: "${rel.superset}" (${rel.supersetCount}x)`);
+      console.log(`    extra classes: ${rel.extraClasses.join(', ')}`);
+      console.log('');
+    }
   }
 
   if (subPatterns.length > 0) {

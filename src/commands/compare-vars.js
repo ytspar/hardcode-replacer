@@ -4,13 +4,47 @@ const fs = require('fs');
 const path = require('path');
 const { search } = require('../search');
 const { buildColorSearchPattern } = require('../color-patterns');
-const { normalizeToHex, findNearestColor, classifyColor } = require('../color-utils');
-const { classifyContext, contextLabel, isActionable, clearCache } = require('../context-classifier');
+const {
+  normalizeToHex, classifyColor,
+  extractAlpha, colorMixSuggestion, suggestVariableName,
+  extractCssProperty, colorDistance, parseColor,
+} = require('../color-utils');
+const { classifyContext, contextLabel, isActionable, clearCache, isInBlockComment } = require('../context-classifier');
+
+/**
+ * Semantic property categories — used to prefer variable matches
+ * that share the same semantic domain as the CSS property context.
+ */
+const PROPERTY_CATEGORIES = {
+  background: ['background', 'backgroundColor', 'bg'],
+  text: ['color', 'textDecorationColor', 'caretColor'],
+  border: ['borderColor', 'borderTopColor', 'borderRightColor', 'borderBottomColor',
+           'borderLeftColor', 'border-color', 'border-top-color', 'border-right-color',
+           'border-bottom-color', 'border-left-color', 'outlineColor', 'outline-color'],
+  shadow: ['boxShadow', 'textShadow', 'box-shadow', 'text-shadow'],
+  fill: ['fill', 'stroke'],
+};
+
+// Map variable name patterns to property categories
+const VAR_NAME_CATEGORIES = {
+  background: /bg|background/i,
+  text: /text|font|foreground/i,
+  border: /border|outline|ring|divide/i,
+  shadow: /shadow/i,
+  fill: /fill|stroke/i,
+};
 
 /**
  * Compare hardcoded colors found in source files against a global variables file.
  * Reports matches, close matches, and unmatched colors.
  * Classifies each result by context to separate actionable from non-actionable.
+ *
+ * Options:
+ *   --vars <file>      Required. CSS/JSON/JS/TS variables file.
+ *   --threshold <n>    Delta-E distance for "close" match (default: 10).
+ *   --fix              Auto-replace exact matches with var() references.
+ *   --baseline <file>  Save results to a baseline file.
+ *   --diff <file>      Compare against a baseline, show only new issues.
  */
 function compareVars(paths, options) {
   if (!options.vars) {
@@ -44,15 +78,19 @@ function compareVars(paths, options) {
     const type = classifyColor(value);
     if (type === 'unknown') continue;
 
-    // Skip comments
+    // Skip comments (single-line and multi-line block comments)
     const trimmedText = result.text.trimStart();
     if (trimmedText.startsWith('//') || trimmedText.startsWith('*') || trimmedText.startsWith('/*')) continue;
+    if (isInBlockComment(result.file, result.line)) continue;
 
     // Skip template literal interpolations
     if (value.includes('${')) continue;
 
     const hex = normalizeToHex(value);
-    const nearest = hex ? findNearestColor(value, palette) : null;
+
+    // Semantic matching: find nearest with property-context awareness
+    const cssProp = extractCssProperty(result.text);
+    const nearest = hex ? findNearestColorSemantic(value, palette, cssProp) : null;
 
     let status;
     if (nearest && nearest.distance === 0) {
@@ -65,6 +103,23 @@ function compareVars(paths, options) {
 
     // Classify context for actionability
     const context = classifyContext(result);
+
+    // Alpha and replacement suggestion
+    const alpha = extractAlpha(value);
+    let suggestion = null;
+    if (nearest && (status === 'exact' || status === 'close')) {
+      if (alpha != null && alpha < 1) {
+        suggestion = colorMixSuggestion(nearest.name, alpha);
+      } else {
+        suggestion = `var(${nearest.name})`;
+      }
+    }
+
+    // Variable name suggestion for unmatched
+    let nameSuggestion = null;
+    if (status === 'unmatched' && isActionable(context)) {
+      nameSuggestion = suggestVariableName(value, cssProp);
+    }
 
     results.push({
       file: result.file,
@@ -79,6 +134,9 @@ function compareVars(paths, options) {
       contextLabel: contextLabel(context),
       actionable: isActionable(context),
       lineText: result.text.trim(),
+      suggestion,
+      nameSuggestion,
+      cssProperty: cssProp,
     });
   }
 
@@ -91,10 +149,174 @@ function compareVars(paths, options) {
     return true;
   });
 
+  // Baseline/diff handling
+  if (options.baseline) {
+    saveBaseline(deduped, options.baseline);
+  }
+
+  let finalResults = deduped;
+  if (options.diff) {
+    finalResults = diffAgainstBaseline(deduped, options.diff);
+  }
+
+  // --fix mode: auto-replace exact matches
+  if (options.fix) {
+    const fixCount = applyFixes(finalResults);
+    console.log(`Fixed ${fixCount} exact matches with var() replacements.`);
+    return;
+  }
+
   if (options.format === 'json') {
-    outputJson(deduped, palette, threshold);
+    outputJson(finalResults, palette, threshold);
   } else {
-    outputText(deduped, palette, threshold, options.vars);
+    outputText(finalResults, palette, threshold, options.vars);
+  }
+}
+
+/**
+ * Find nearest color with semantic awareness.
+ * When multiple variables have the same color distance,
+ * prefer variables whose name matches the CSS property context.
+ */
+function findNearestColorSemantic(colorStr, palette, cssProp) {
+  const rgb = parseColor(colorStr);
+  if (!rgb) return null;
+
+  const propCategory = cssProp ? getPropertyCategory(cssProp) : null;
+
+  let nearest = null;
+  let minDistance = Infinity;
+  let bestSemanticScore = 0;
+
+  for (const [name, hex] of Object.entries(palette)) {
+    const paletteRgb = parseColor(hex);
+    if (!paletteRgb) continue;
+
+    const dist = colorDistance(rgb, paletteRgb);
+    const roundedDist = Math.round(dist * 100) / 100;
+
+    // Semantic score: higher is better match for the property context
+    let semanticScore = 0;
+    if (propCategory) {
+      const varPattern = VAR_NAME_CATEGORIES[propCategory];
+      if (varPattern && varPattern.test(name)) {
+        semanticScore = 1;
+      }
+    }
+
+    // Prefer: lower distance first, then higher semantic score
+    const isBetter = dist < minDistance - 0.5 ||
+      (Math.abs(dist - minDistance) <= 0.5 && semanticScore > bestSemanticScore);
+
+    if (isBetter) {
+      minDistance = dist;
+      bestSemanticScore = semanticScore;
+      nearest = { name, hex, distance: roundedDist };
+    }
+  }
+
+  return nearest;
+}
+
+function getPropertyCategory(cssProp) {
+  const prop = cssProp.toLowerCase();
+  for (const [category, props] of Object.entries(PROPERTY_CATEGORIES)) {
+    for (const p of props) {
+      if (prop === p.toLowerCase() || prop.includes(p.toLowerCase())) {
+        return category;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Apply --fix: replace exact matches with var() or color-mix() in source files.
+ */
+function applyFixes(results) {
+  const exactActionable = results.filter(r => r.actionable && r.status === 'exact' && r.suggestion);
+
+  // Group by file for efficient processing
+  const byFile = {};
+  for (const r of exactActionable) {
+    if (!byFile[r.file]) byFile[r.file] = [];
+    byFile[r.file].push(r);
+  }
+
+  let fixCount = 0;
+
+  for (const [filePath, fileResults] of Object.entries(byFile)) {
+    try {
+      let content = fs.readFileSync(filePath, 'utf-8');
+      const lines = content.split('\n');
+
+      // Process replacements in reverse order (by line, then column) to preserve positions
+      const sorted = [...fileResults].sort((a, b) => b.line - a.line || b.column - a.column);
+
+      for (const r of sorted) {
+        const lineIdx = r.line - 1;
+        if (lineIdx < 0 || lineIdx >= lines.length) continue;
+
+        const line = lines[lineIdx];
+        const col = r.column - 1;
+
+        // Find the exact match in the line at the expected position
+        const matchIdx = line.indexOf(r.value, col > 0 ? col - 1 : 0);
+        if (matchIdx === -1) continue;
+
+        // Replace
+        lines[lineIdx] = line.substring(0, matchIdx) + r.suggestion + line.substring(matchIdx + r.value.length);
+        fixCount++;
+      }
+
+      fs.writeFileSync(filePath, lines.join('\n'), 'utf-8');
+    } catch (err) {
+      console.error(`Error fixing ${filePath}: ${err.message}`);
+    }
+  }
+
+  return fixCount;
+}
+
+/**
+ * Save results as a baseline JSON file for future diffing.
+ */
+function saveBaseline(results, filePath) {
+  const baseline = results.map(r => ({
+    file: r.file,
+    line: r.line,
+    column: r.column,
+    value: r.value,
+    hex: r.hex,
+    status: r.status,
+    context: r.context,
+  }));
+
+  const resolved = path.resolve(filePath);
+  fs.writeFileSync(resolved, JSON.stringify(baseline, null, 2), 'utf-8');
+  console.log(`Baseline saved: ${baseline.length} entries to ${resolved}`);
+}
+
+/**
+ * Diff current results against a baseline, returning only new issues.
+ */
+function diffAgainstBaseline(results, baselinePath) {
+  const resolved = path.resolve(baselinePath);
+  if (!fs.existsSync(resolved)) {
+    console.error(`Warning: Baseline file not found: ${resolved}. Showing all results.`);
+    return results;
+  }
+
+  try {
+    const baseline = JSON.parse(fs.readFileSync(resolved, 'utf-8'));
+    const baselineKeys = new Set(baseline.map(b => `${b.file}:${b.value}:${b.hex}`));
+
+    const newResults = results.filter(r => !baselineKeys.has(`${r.file}:${r.value}:${r.hex}`));
+    console.log(`Diff: ${newResults.length} new issues (${results.length - newResults.length} already in baseline)\n`);
+    return newResults;
+  } catch {
+    console.error(`Warning: Could not parse baseline file. Showing all results.`);
+    return results;
   }
 }
 
@@ -237,7 +459,8 @@ function outputText(results, palette, threshold, varsFile) {
     console.log(`--- ACTIONABLE UNMATCHED (${actUnmatched.length}) ---`);
     for (const r of actUnmatched) {
       const nearestInfo = r.match ? ` (nearest: ${r.match.name} ${r.match.hex} dE=${r.match.distance})` : '';
-      console.log(`  ${r.file}:${r.line}:${r.column}  ${r.value}${r.hex ? ` -> ${r.hex}` : ''}${nearestInfo}`);
+      const nameInfo = r.nameSuggestion ? ` [suggest: ${r.nameSuggestion}]` : '';
+      console.log(`  ${r.file}:${r.line}:${r.column}  ${r.value}${r.hex ? ` -> ${r.hex}` : ''}${nearestInfo}${nameInfo}`);
       console.log(`    ${r.lineText}`);
     }
     console.log('');
@@ -246,7 +469,8 @@ function outputText(results, palette, threshold, varsFile) {
   if (actClose.length > 0) {
     console.log(`--- ACTIONABLE CLOSE MATCHES (${actClose.length}) ---`);
     for (const r of actClose) {
-      console.log(`  ${r.file}:${r.line}:${r.column}  ${r.value} -> use ${r.match.name} (${r.match.hex}, dE=${r.match.distance})`);
+      const replacement = r.suggestion ? ` | replace: ${r.suggestion}` : '';
+      console.log(`  ${r.file}:${r.line}:${r.column}  ${r.value} -> use ${r.match.name} (${r.match.hex}, dE=${r.match.distance})${replacement}`);
       console.log(`    ${r.lineText}`);
     }
     console.log('');
@@ -255,7 +479,8 @@ function outputText(results, palette, threshold, varsFile) {
   if (actExact.length > 0) {
     console.log(`--- ACTIONABLE EXACT MATCHES (${actExact.length}) ---`);
     for (const r of actExact) {
-      console.log(`  ${r.file}:${r.line}:${r.column}  ${r.value} -> ${r.match.name} (${r.match.hex})`);
+      const replacement = r.suggestion ? ` | replace: ${r.suggestion}` : '';
+      console.log(`  ${r.file}:${r.line}:${r.column}  ${r.value} -> ${r.match.name} (${r.match.hex})${replacement}`);
       console.log(`    ${r.lineText}`);
     }
     console.log('');

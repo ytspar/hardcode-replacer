@@ -4,7 +4,7 @@ const { search } = require('../search');
 const { buildColorSearchPattern, CSS_COLOR_PROPERTIES, JS_COLOR_PROPERTIES } = require('../color-patterns');
 const { NAMED_COLORS, NAMED_COLOR_SET } = require('../css-named-colors');
 const { classifyColor, normalizeToHex } = require('../color-utils');
-const { classifyContext, contextLabel, isActionable, clearCache } = require('../context-classifier');
+const { classifyContext, contextLabel, isActionable, clearCache, isInBlockComment } = require('../context-classifier');
 
 /**
  * Find all hardcoded color values in source files.
@@ -32,9 +32,10 @@ function findColors(paths, options) {
     // Skip non-color matches
     if (type === 'unknown') continue;
 
-    // Skip colors in comments
+    // Skip colors in comments (single-line and multi-line block comments)
     const trimmedText = result.text.trimStart();
     if (trimmedText.startsWith('//') || trimmedText.startsWith('*') || trimmedText.startsWith('/*')) continue;
+    if (isInBlockComment(result.file, result.line)) continue;
 
     // Skip template literal interpolations (e.g., `rgba(${r}, ${g}, ${b})`)
     if (match.includes('${')) continue;

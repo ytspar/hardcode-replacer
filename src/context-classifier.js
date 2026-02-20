@@ -5,6 +5,8 @@ const path = require('path');
 
 // Cache for file-level analysis (imports, patterns)
 const fileCache = new Map();
+// Cache for block comment ranges per file
+const commentCache = new Map();
 
 // Canvas/WebGL library import patterns
 const CANVAS_IMPORTS = [
@@ -227,8 +229,60 @@ function getFileInfo(filePath) {
   return info;
 }
 
+/**
+ * Check if a line is inside a block comment (/* ... *\/).
+ * Reads the file and caches block comment line ranges.
+ */
+function isInBlockComment(filePath, lineNum) {
+  if (!commentCache.has(filePath)) {
+    const ranges = [];
+    try {
+      const content = fs.readFileSync(filePath, 'utf-8');
+      const lines = content.split('\n');
+      let inBlock = false;
+      let blockStart = 0;
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (!inBlock) {
+          // Check for block comment start (not a single-line /* ... */)
+          const openIdx = line.indexOf('/*');
+          if (openIdx !== -1) {
+            const closeIdx = line.indexOf('*/', openIdx + 2);
+            if (closeIdx === -1) {
+              // Block comment starts here and spans multiple lines
+              inBlock = true;
+              blockStart = i + 1; // 1-indexed
+            }
+            // If close is on same line, it's a single-line block comment — handled by existing logic
+          }
+        } else {
+          if (line.includes('*/')) {
+            ranges.push([blockStart, i + 1]); // [start, end] inclusive, 1-indexed
+            inBlock = false;
+          }
+        }
+      }
+      // Unclosed block comment
+      if (inBlock) {
+        ranges.push([blockStart, lines.length]);
+      }
+    } catch {
+      // Can't read file
+    }
+    commentCache.set(filePath, ranges);
+  }
+
+  const ranges = commentCache.get(filePath);
+  for (const [start, end] of ranges) {
+    if (lineNum >= start && lineNum <= end) return true;
+  }
+  return false;
+}
+
 function clearCache() {
   fileCache.clear();
+  commentCache.clear();
 }
 
 function contextLabel(ctx) {
@@ -251,10 +305,8 @@ function isActionable(ctx) {
 
 module.exports = {
   classifyContext,
-  getFileInfo,
   clearCache,
   contextLabel,
   isActionable,
-  CANVAS_IMPORTS,
-  DEFINITION_FILE_PATTERNS,
+  isInBlockComment,
 };

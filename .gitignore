@@ -1,7 +1,25 @@
 node_modules/
-.DS_Store
-*.log
-.env
 dist/
 coverage/
+.nyc_output/
+
+# Environment
+.env*
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+
+# Logs
+*.log
+
+# Build artifacts
+*.tgz
+
+# Claude
 .claude/

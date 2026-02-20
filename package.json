@@ -1,13 +1,27 @@
 {
   "name": "hardcode-replacer",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "CLI tool for finding hardcoded colors, Tailwind classes, and extractable patterns in codebases",
   "main": "src/cli.js",
   "bin": {
     "hardcode-replacer": "./bin/hardcode-replacer.js"
   },
+  "files": [
+    "bin/",
+    "src/",
+    "LICENSE",
+    "README.md"
+  ],
+  "exports": {
+    ".": "./src/cli.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ytspar/hardcode-replacer.git"
+  },
   "scripts": {
-    "start": "node bin/hardcode-replacer.js"
+    "start": "node bin/hardcode-replacer.js",
+    "test": "jest"
   },
   "keywords": [
     "css",
@@ -20,6 +34,9 @@
   "license": "MIT",
   "dependencies": {
     "commander": "^13.1.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0"
   },
   "engines": {
     "node": ">=18.0.0"

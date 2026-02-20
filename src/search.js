@@ -206,4 +206,4 @@ function search(pattern, paths = [], options = {}) {
   return searchWithGrep(pattern, paths, options);
 }
 
-module.exports = { search, searchWithRipgrep, searchWithGrep, hasRipgrep };
+module.exports = { search };

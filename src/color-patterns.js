@@ -59,56 +59,18 @@ function buildColorSearchPattern() {
   ].join('|');
 }
 
-// Build a pattern for finding named colors in CSS property contexts
-function buildNamedColorContextPattern() {
-  const props = CSS_COLOR_PROPERTIES.map(p => p.replace('-', '[-]?')).join('|');
-  return `(${props})\\s*:\\s*[a-zA-Z]+`;
-}
-
-// Combined regex for post-processing: extract color values from a line
-function buildColorExtractionRegex() {
-  return new RegExp(
-    `(${HEX_PATTERN_STR})`
-    + `|(${RGB_PATTERN_STR})`
-    + `|(${HSL_PATTERN_STR})`
-    + `|(oklch\\([^)]+\\))`
-    + `|(oklab\\([^)]+\\))`
-    + `|(lch\\([^)]+\\))`
-    + `|(lab\\([^)]+\\))`
-    + `|(hwb\\([^)]+\\))`
-    + `|(color\\(\\s*(?:srgb|srgb-linear|display-p3|a98-rgb|prophoto-rgb|rec2020|xyz|xyz-d50|xyz-d65)\\b[^)]*\\))`,
-    'gi'
-  );
-}
-
 // File extensions to search by default
 const DEFAULT_FILE_TYPES = [
   'html', 'htm', 'css', 'scss', 'sass', 'less', 'styl',
   'jsx', 'tsx', 'js', 'ts', 'vue', 'svelte', 'astro',
 ];
 
-function buildFileGlob() {
-  return `*.{${DEFAULT_FILE_TYPES.join(',')}}`;
-}
-
 module.exports = {
   HEX_PATTERN,
-  HEX_PATTERN_STR,
   RGB_PATTERN,
-  RGB_PATTERN_STR,
   HSL_PATTERN,
-  HSL_PATTERN_STR,
-  OKLCH_PATTERN_STR,
-  OKLAB_PATTERN_STR,
-  LCH_PATTERN_STR,
-  LAB_PATTERN_STR,
-  HWB_PATTERN_STR,
-  COLOR_FN_PATTERN_STR,
   CSS_COLOR_PROPERTIES,
   JS_COLOR_PROPERTIES,
   DEFAULT_FILE_TYPES,
   buildColorSearchPattern,
-  buildNamedColorContextPattern,
-  buildColorExtractionRegex,
-  buildFileGlob,
 };
