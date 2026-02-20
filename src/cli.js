@@ -6,6 +6,12 @@ const { findTailwind } = require('./commands/find-tailwind');
 const { compareVars } = require('./commands/compare-vars');
 const { findPatterns } = require('./commands/find-patterns');
 
+// Helper for repeatable options (--exclude can be used multiple times)
+function collect(val, arr) {
+  arr.push(val);
+  return arr;
+}
+
 const program = new Command();
 
 program
@@ -19,7 +25,7 @@ program
   .description('Find hardcoded color values (hex, rgb, hsl, oklch, named, etc.)')
   .argument('[paths...]', 'Paths to search (files or directories)', ['.'])
   .option('--include <glob>', 'File glob pattern to include (e.g., "*.tsx")')
-  .option('--exclude <glob>', 'File glob pattern to exclude (e.g., "**/*.test.*")')
+  .option('--exclude <glob...>', 'File glob patterns to exclude (repeatable)', collect, [])
   .option('--format <format>', 'Output format: text or json', 'text')
   .option('--no-named', 'Skip named CSS color detection (red, blue, etc.)')
   .action((paths, opts) => {
@@ -32,7 +38,7 @@ program
   .description('Find Tailwind CSS color utility classes (bg-red-500, text-blue-300, etc.)')
   .argument('[paths...]', 'Paths to search (files or directories)', ['.'])
   .option('--include <glob>', 'File glob pattern to include')
-  .option('--exclude <glob>', 'File glob pattern to exclude')
+  .option('--exclude <glob...>', 'File glob patterns to exclude (repeatable)', collect, [])
   .option('--format <format>', 'Output format: text or json', 'text')
   .action((paths, opts) => {
     findTailwind(paths, opts);
@@ -46,7 +52,7 @@ program
   .requiredOption('--vars <file>', 'Path to variables file (CSS, JSON, JS, or TS)')
   .option('--threshold <number>', 'Color distance threshold for close matches (delta-E)', '10')
   .option('--include <glob>', 'File glob pattern to include')
-  .option('--exclude <glob>', 'File glob pattern to exclude')
+  .option('--exclude <glob...>', 'File glob patterns to exclude (repeatable)', collect, [])
   .option('--format <format>', 'Output format: text or json', 'text')
   .action((paths, opts) => {
     compareVars(paths, opts);
@@ -60,7 +66,7 @@ program
   .option('--min-count <number>', 'Minimum occurrences to report', '2')
   .option('--min-classes <number>', 'Minimum classes in a pattern to report', '2')
   .option('--include <glob>', 'File glob pattern to include')
-  .option('--exclude <glob>', 'File glob pattern to exclude')
+  .option('--exclude <glob...>', 'File glob patterns to exclude (repeatable)', collect, [])
   .option('--format <format>', 'Output format: text or json', 'text')
   .action((paths, opts) => {
     findPatterns(paths, opts);

@@ -28,12 +28,18 @@ function findColors(paths, options) {
     const match = result.match.trim();
     const type = classifyColor(match);
 
-    // Skip non-color matches (e.g., rgba used as a function name in JS)
+    // Skip non-color matches
     if (type === 'unknown') continue;
 
-    // Skip colors in comments (basic heuristic)
+    // Skip colors in comments
     const trimmedText = result.text.trimStart();
     if (trimmedText.startsWith('//') || trimmedText.startsWith('*') || trimmedText.startsWith('/*')) continue;
+
+    // Skip template literal interpolations (e.g., `rgba(${r}, ${g}, ${b})`)
+    if (match.includes('${')) continue;
+
+    // Skip matches that are clearly type annotations or function signatures
+    if (/:\s*(string|number|boolean|void|any)\b/.test(result.text) && !result.text.includes("'") && !result.text.includes('"')) continue;
 
     results.push({
       file: result.file,

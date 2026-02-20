@@ -45,6 +45,9 @@ function compareVars(paths, options) {
     const trimmedText = result.text.trimStart();
     if (trimmedText.startsWith('//') || trimmedText.startsWith('*') || trimmedText.startsWith('/*')) continue;
 
+    // Skip template literal interpolations
+    if (value.includes('${')) continue;
+
     const hex = normalizeToHex(value);
     const nearest = hex ? findNearestColor(value, palette) : null;
 

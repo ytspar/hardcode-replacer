@@ -8,20 +8,22 @@ const HEX_PATTERN = /#(?:[0-9a-fA-F]{3,4}){1,2}\b/;
 const HEX_PATTERN_STR = '#(?:[0-9a-fA-F]{3,4}){1,2}\\b';
 
 // RGB/RGBA: rgb(255, 0, 0), rgba(255, 0, 0, 0.5), rgb(255 0 0 / 50%)
+// \b prefix prevents matching JS function names like hexToRgba(...)
 const RGB_PATTERN = /rgba?\(\s*[\d.]+%?\s*[,\s]\s*[\d.]+%?\s*[,\s]\s*[\d.]+%?\s*(?:[,/]\s*[\d.]+%?\s*)?\)/;
-const RGB_PATTERN_STR = 'rgba?\\([^)]+\\)';
+const RGB_PATTERN_STR = '\\brgba?\\([^)]+\\)';
 
 // HSL/HSLA: hsl(360, 100%, 50%), hsla(360, 100%, 50%, 0.5)
 const HSL_PATTERN = /hsla?\(\s*[\d.]+(?:deg|rad|grad|turn)?\s*[,\s]\s*[\d.]+%?\s*[,\s]\s*[\d.]+%?\s*(?:[,/]\s*[\d.]+%?\s*)?\)/;
-const HSL_PATTERN_STR = 'hsla?\\([^)]+\\)';
+const HSL_PATTERN_STR = '\\bhsla?\\([^)]+\\)';
 
-// Modern CSS color functions
-const OKLCH_PATTERN_STR = 'oklch\\([^)]+\\)';
-const OKLAB_PATTERN_STR = 'oklab\\([^)]+\\)';
-const LCH_PATTERN_STR = 'lch\\([^)]+\\)';
-const LAB_PATTERN_STR = 'lab\\([^)]+\\)';
-const HWB_PATTERN_STR = 'hwb\\([^)]+\\)';
-const COLOR_FN_PATTERN_STR = 'color\\([^)]+\\)';
+// Modern CSS color functions (\b prevents matching function names like getNodeColor)
+const OKLCH_PATTERN_STR = '\\boklch\\([^)]+\\)';
+const OKLAB_PATTERN_STR = '\\boklab\\([^)]+\\)';
+const LCH_PATTERN_STR = '\\blch\\([^)]+\\)';
+const LAB_PATTERN_STR = '\\blab\\([^)]+\\)';
+const HWB_PATTERN_STR = '\\bhwb\\([^)]+\\)';
+// CSS color() requires a colorspace keyword to avoid matching JS functions
+const COLOR_FN_PATTERN_STR = '\\bcolor\\(\\s*(srgb|srgb-linear|display-p3|a98-rgb|prophoto-rgb|rec2020|xyz|xyz-d50|xyz-d65)\\b[^)]*\\)';
 
 // CSS properties that take color values (used for named color detection)
 const CSS_COLOR_PROPERTIES = [
@@ -74,7 +76,7 @@ function buildColorExtractionRegex() {
     + `|(lch\\([^)]+\\))`
     + `|(lab\\([^)]+\\))`
     + `|(hwb\\([^)]+\\))`
-    + `|(color\\([^)]+\\))`,
+    + `|(color\\(\\s*(?:srgb|srgb-linear|display-p3|a98-rgb|prophoto-rgb|rec2020|xyz|xyz-d50|xyz-d65)\\b[^)]*\\))`,
     'gi'
   );
 }
