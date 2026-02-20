@@ -1,8 +1,9 @@
 # hardcode-replacer
 
+[![npm version](https://img.shields.io/npm/v/hardcode-replacer.svg)](https://www.npmjs.com/package/hardcode-replacer)
+[![npm downloads](https://img.shields.io/npm/dm/hardcode-replacer.svg)](https://www.npmjs.com/package/hardcode-replacer)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D18-green.svg)](https://nodejs.org/)
-[![npm version](https://img.shields.io/badge/npm-v2.0.0-red.svg)](https://www.npmjs.com/package/hardcode-replacer)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/ytspar/hardcode-replacer/pulls)
 
 **Find and fix hardcoded colors, Tailwind color classes, and repeated class patterns in web codebases.**
@@ -29,11 +30,11 @@ hardcode-replacer does all four in a single command.
 ## Quick Start
 
 ```bash
-# Install
-git clone https://github.com/ytspar/hardcode-replacer.git
-cd hardcode-replacer
-npm install
-npm link
+# Install globally from npm
+npm install -g hardcode-replacer
+
+# Or use npx without installing
+npx hardcode-replacer colors src/
 
 # Find all hardcoded colors
 hardcode-replacer colors src/
@@ -371,6 +372,16 @@ src/
 **Classification**: File-level analysis is cached per-file. Import scanning checks the first 100 lines for canvas/WebGL library imports. Block comment ranges are computed once per file.
 
 ---
+
+## Installation
+
+```bash
+# npm
+npm install -g hardcode-replacer
+
+# npx (no install)
+npx hardcode-replacer colors src/
+```
 
 ## Requirements
 
