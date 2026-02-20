@@ -53,9 +53,10 @@ const THEME_BUILDER_PATTERNS = [
  *   'mapping'          - Used as a lookup key or mapping value
  *   'generated'        - In generated/template code
  *   'meta'             - Meta tags, manifest, OG images (browser-level, no CSS)
+ *   'effect'           - Pure black/white with alpha in effects (shadows, overlays)
  */
 function classifyContext(result) {
-  const { file, text } = result;
+  const { file, text, match: matchedValue } = result;
   const trimmed = (text || '').trim();
 
   // 1. CSS variable definition: --name: #hex or --name: rgba(...)
@@ -127,6 +128,23 @@ function classifyContext(result) {
   // Fallback color in OR conditional with getCssVar: getCssVar(x) || '#hex'
   if (/\|\|\s*['"]#/.test(trimmed)) {
     return 'canvas';
+  }
+
+  // Pure black/white with alpha used in effects (shadows, gradients, overlays).
+  // rgba(0,0,0,X) and rgba(255,255,255,X) are intentionally absolute colors
+  // (not theme colors) in virtually all CSS contexts.
+  if (matchedValue) {
+    const val = matchedValue.toLowerCase();
+    if (/^rgba?\(\s*0\s*,\s*0\s*,\s*0[\s,]/.test(val) ||
+        /^rgba?\(\s*255\s*,\s*255\s*,\s*255[\s,]/.test(val)) {
+      return 'effect';
+    }
+    // #000 / #000000 / #fff / #ffffff in shadow/gradient contexts
+    if (/^#(?:000(?:000)?|fff(?:fff)?)$/i.test(val)) {
+      if (/shadow|gradient|scan|glow|overlay/i.test(trimmed)) {
+        return 'effect';
+      }
+    }
   }
 
   return 'actionable';
@@ -222,6 +240,7 @@ function contextLabel(ctx) {
     'mapping': 'MAPPING/LOOKUP',
     'generated': 'GENERATED CODE',
     'meta': 'META/MANIFEST',
+    'effect': 'EFFECT (black/white alpha)',
   };
   return labels[ctx] || ctx;
 }
