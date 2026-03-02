@@ -5,6 +5,7 @@ const { buildColorSearchPattern, CSS_COLOR_PROPERTIES, JS_COLOR_PROPERTIES } = r
 const { NAMED_COLORS, NAMED_COLOR_SET } = require('../css-named-colors');
 const { classifyColor, normalizeToHex } = require('../color-utils');
 const { classifyContext, contextLabel, isActionable, clearCache, isInBlockComment } = require('../context-classifier');
+const { groupByFile, countByKey } = require('../utils');
 
 /**
  * Find all hardcoded color values in source files.
@@ -21,7 +22,6 @@ function findColors(paths, options) {
   const rawResults = search(colorPattern, paths, {
     include: options.include,
     exclude: options.exclude,
-    fileTypes: options.fileTypes,
   });
 
   // Post-process: validate color values from matched lines
@@ -103,7 +103,6 @@ function findNamedColors(paths, options) {
     const rawResults = search(pattern, paths, {
       include: options.include,
       exclude: options.exclude,
-      fileTypes: options.fileTypes,
       caseSensitive: true,
     });
 
@@ -123,6 +122,7 @@ function findNamedColors(paths, options) {
       const trimmedText = result.text.trimStart();
       if (trimmedText.startsWith('//') || trimmedText.startsWith('*') || trimmedText.startsWith('/*')) continue;
 
+      const ctx = classifyContext(result);
       results.push({
         file: result.file,
         line: result.line,
@@ -130,7 +130,10 @@ function findNamedColors(paths, options) {
         value: colorName,
         type: 'named',
         hex: NAMED_COLORS[colorName] || null,
-        context: result.text.trim(),
+        lineText: result.text.trim(),
+        context: ctx,
+        contextLabel: contextLabel(ctx),
+        actionable: isActionable(ctx),
       });
     }
   }
@@ -202,28 +205,10 @@ function outputText(results) {
   }
 }
 
-function groupByFile(results) {
-  const grouped = {};
-  for (const r of results) {
-    if (!grouped[r.file]) grouped[r.file] = [];
-    grouped[r.file].push(r);
-  }
-  return grouped;
-}
-
 function countByType(results) {
   const counts = {};
   for (const r of results) {
     counts[r.type] = (counts[r.type] || 0) + 1;
-  }
-  return counts;
-}
-
-function countByKey(results, key) {
-  const counts = {};
-  for (const r of results) {
-    const val = r[key] || 'unknown';
-    counts[val] = (counts[val] || 0) + 1;
   }
   return counts;
 }

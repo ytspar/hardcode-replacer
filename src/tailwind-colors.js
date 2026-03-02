@@ -1,5 +1,8 @@
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
+
 // Tailwind CSS color utility prefixes
 const COLOR_PREFIXES = [
   'bg', 'text', 'border', 'ring', 'shadow', 'divide', 'outline',
@@ -56,8 +59,6 @@ const TAILWIND_V4_PATTERNS = {
  * Returns 4 if v4 patterns are found, 3 otherwise.
  */
 function detectTailwindVersion(searchPaths) {
-  const fs = require('fs');
-  const path = require('path');
 
   // Check for v4 patterns in CSS files
   for (const searchPath of searchPaths) {

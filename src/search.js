@@ -3,14 +3,17 @@
 const { execFileSync } = require('child_process');
 const { DEFAULT_FILE_TYPES } = require('./color-patterns');
 
-// Check if ripgrep is available
+// Check if ripgrep is available (memoized)
+let _hasRipgrep = null;
 function hasRipgrep() {
+  if (_hasRipgrep !== null) return _hasRipgrep;
   try {
     execFileSync('rg', ['--version'], { stdio: 'pipe' });
-    return true;
+    _hasRipgrep = true;
   } catch {
-    return false;
+    _hasRipgrep = false;
   }
+  return _hasRipgrep;
 }
 
 /**
@@ -33,10 +36,6 @@ function searchWithRipgrep(pattern, paths, options = {}) {
   // File type filtering
   if (options.include) {
     args.push('--glob', options.include);
-  } else if (options.fileTypes) {
-    for (const ext of options.fileTypes) {
-      args.push('--glob', `**/*.${ext}`);
-    }
   } else {
     // Default to web file types
     for (const ext of DEFAULT_FILE_TYPES) {

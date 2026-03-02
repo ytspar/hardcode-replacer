@@ -83,6 +83,132 @@ describe('classifyContext', () => {
     });
     expect(result).toBe('canvas');
   });
+
+  test('identifies theme definition files by path', () => {
+    const result = classifyContext({
+      file: 'src/theme.ts',
+      text: "  primary: '#10b981',",
+      match: '#10b981',
+    });
+    expect(result).toBe('theme-definition');
+  });
+
+  test('identifies palette definition files', () => {
+    const result = classifyContext({
+      file: 'src/palette.ts',
+      text: "  green: '#10b981',",
+      match: '#10b981',
+    });
+    expect(result).toBe('theme-definition');
+  });
+
+  test('identifies design-tokens directory as theme definition', () => {
+    const result = classifyContext({
+      file: 'src/design-tokens/colors.ts',
+      text: "  primary: '#10b981',",
+      match: '#10b981',
+    });
+    expect(result).toBe('theme-definition');
+  });
+
+  test('theme definition file with var() is actionable', () => {
+    const result = classifyContext({
+      file: 'src/theme.ts',
+      text: "  primary: 'var(--color-primary) #10b981',",
+      match: '#10b981',
+    });
+    expect(result).toBe('actionable');
+  });
+
+  test('identifies mapping files by path', () => {
+    const result = classifyContext({
+      file: 'src/colorMapper.ts',
+      text: "  red: '#ff0000',",
+      match: '#ff0000',
+    });
+    expect(result).toBe('mapping');
+  });
+
+  test('identifies template literal generated code', () => {
+    const result = classifyContext({
+      file: 'src/generator.ts',
+      text: '  `<div style="color: ${color}">#ff0000</div>`',
+      match: '#ff0000',
+    });
+    expect(result).toBe('generated');
+  });
+
+  test('identifies quoted CSS property string as mapping', () => {
+    const result = classifyContext({
+      file: 'src/utils.ts',
+      text: '  "background-color: #ff0000": "error",',
+      match: '#ff0000',
+    });
+    expect(result).toBe('mapping');
+  });
+
+  test('identifies css: string as mapping', () => {
+    const result = classifyContext({
+      file: 'src/styles.ts',
+      text: "  css: 'border-color: rgba(0, 0, 0, 0.1)',",
+      match: 'rgba(0, 0, 0, 0.1)',
+    });
+    expect(result).toBe('mapping');
+  });
+
+  test('identifies modern rgb(0 0 0 / alpha) as effect', () => {
+    const result = classifyContext({
+      file: 'src/component.tsx',
+      text: '  box-shadow: 0 2px 4px rgb(0 0 0 / 0.1);',
+      match: 'rgb(0 0 0 / 0.1)',
+    });
+    expect(result).toBe('effect');
+  });
+
+  test('identifies modern rgb(255 255 255 / alpha) as effect', () => {
+    const result = classifyContext({
+      file: 'src/component.tsx',
+      text: '  background: rgb(255 255 255 / 0.5);',
+      match: 'rgb(255 255 255 / 0.5)',
+    });
+    expect(result).toBe('effect');
+  });
+
+  test('identifies #000 in shadow context as effect', () => {
+    const result = classifyContext({
+      file: 'src/component.tsx',
+      text: '  box-shadow: 0 2px 8px #000;',
+      match: '#000',
+    });
+    expect(result).toBe('effect');
+  });
+
+  test('identifies #fff in gradient context as effect', () => {
+    const result = classifyContext({
+      file: 'src/component.tsx',
+      text: '  background: linear-gradient(to bottom, #fff, transparent);',
+      match: '#fff',
+    });
+    expect(result).toBe('effect');
+  });
+
+  test('#000 outside shadow/gradient context is actionable', () => {
+    const result = classifyContext({
+      file: 'src/component.tsx',
+      text: '  color: #000;',
+      match: '#000',
+    });
+    expect(result).toBe('actionable');
+  });
+
+  test('getComputedStyle triggers canvas classification', () => {
+    const result = classifyContext({
+      file: 'src/utils.js',
+      text: "  getComputedStyle(el).getPropertyValue('--color')",
+      match: '#10b981',
+    });
+    expect(result).toBe('canvas');
+  });
 });
 
 describe('contextLabel', () => {

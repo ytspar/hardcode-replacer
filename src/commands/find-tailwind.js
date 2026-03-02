@@ -5,6 +5,7 @@ const path = require('path');
 const { search } = require('../search');
 const { buildTailwindColorPattern, SPECIAL_COLORS, detectTailwindVersion, parseTailwindV4Theme, TAILWIND_V4_PATTERNS } = require('../tailwind-colors');
 const { normalizeToHex, findNearestColor } = require('../color-utils');
+const { groupByFile, countByKey } = require('../utils');
 
 /**
  * Find all Tailwind CSS color utility classes in source files.
@@ -20,7 +21,6 @@ function findTailwind(paths, options) {
   const rawResults = search(pattern, paths, {
     include: options.include,
     exclude: options.exclude,
-    fileTypes: options.fileTypes,
   });
 
   // Detect Tailwind version
@@ -201,7 +201,7 @@ function outputJson(results, twVersion, v4Info) {
       totalClasses: results.length,
       totalFiles: Object.keys(grouped).length,
       byPrefix: countByKey(results, 'prefix'),
-      byColor: countByKey(results, 'color'),
+      byColor: countByColor(results),
       arbitraryValues: arbitrary.length,
       arbitraryWithThemeMatch: arbitraryWithMatch.length,
     },
@@ -266,22 +266,9 @@ function outputText(results, twVersion, v4Info) {
   }
 }
 
-function groupByFile(results) {
-  const grouped = {};
-  for (const r of results) {
-    if (!grouped[r.file]) grouped[r.file] = [];
-    grouped[r.file].push(r);
-  }
-  return grouped;
-}
-
-function countByKey(results, key) {
-  const counts = {};
-  for (const r of results) {
-    const val = r[key] || 'arbitrary';
-    counts[val] = (counts[val] || 0) + 1;
-  }
-  return counts;
+// countByKey with 'arbitrary' fallback for Tailwind color grouping
+function countByColor(results) {
+  return countByKey(results, 'color', 'arbitrary');
 }
 
 module.exports = { findTailwind };

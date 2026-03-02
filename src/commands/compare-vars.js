@@ -10,6 +10,7 @@ const {
   extractCssProperty, colorDistance, parseColor,
 } = require('../color-utils');
 const { classifyContext, contextLabel, isActionable, clearCache, isInBlockComment } = require('../context-classifier');
+const { countByKey } = require('../utils');
 
 /**
  * Semantic property categories — used to prefer variable matches
@@ -503,15 +504,6 @@ function outputText(results, palette, threshold, varsFile) {
     }
     console.log('');
   }
-}
-
-function countByKey(results, key) {
-  const counts = {};
-  for (const r of results) {
-    const val = r[key] || 'unknown';
-    counts[val] = (counts[val] || 0) + 1;
-  }
-  return counts;
 }
 
 function groupByContext(results) {

@@ -23,3 +23,6 @@ Thumbs.db
 
 # Claude
 .claude/
+
+# Product Finalizer
+.product-finalizer-skip.json

@@ -103,6 +103,9 @@ function mergeOptions(cliOpts, config) {
   if (config.tailwindVersion) {
     merged.tailwindVersion = config.tailwindVersion;
   }
+  if (config.json === true && merged.format === 'text') {
+    merged.format = 'json';
+  }
 
   return merged;
 }

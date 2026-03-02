@@ -6,6 +6,7 @@ const { findTailwind } = require('./commands/find-tailwind');
 const { compareVars } = require('./commands/compare-vars');
 const { findPatterns } = require('./commands/find-patterns');
 const { loadConfig, mergeOptions } = require('./config');
+const { getSchema } = require('./output-schemas');
 
 // Helper for repeatable options (--exclude can be used multiple times)
 function collect(val, arr) {
@@ -34,7 +35,18 @@ program
     + 'Config: Place .hardcode-replacerrc.json in your project root for defaults.\n'
     + 'Docs:   https://github.com/ytspar/hardcode-replacer'
   )
-  .version('2.0.0');
+  .version('2.1.0')
+  .option('--json', 'Output as JSON (shorthand for --format json)')
+  .option('--output-schema', 'Print the TypeScript type for this command\'s JSON output and exit');
+
+program.hook('preAction', (thisCommand, actionCommand) => {
+  const globalOpts = program.opts();
+
+  // --json: set format to 'json'
+  if (globalOpts.json) {
+    actionCommand.setOptionValue('format', 'json');
+  }
+});
 
 // === guide command ===
 program
@@ -104,14 +116,19 @@ CONFIG FILE
   }
 
 FOR AI ASSISTANTS
-  Use --format json for structured output. The JSON includes:
+  Use --json (or --format json) for structured output. The JSON includes:
   - summary with counts by status and context
   - actionable results grouped by exact/close/unmatched
   - skipped results grouped by context
   - suggestion field with exact replacement code
   - nameSuggestion field for unmatched colors
 
-  Example: hardcode-replacer compare src/ --vars theme.css --format json
+  Use --output-schema to print the TypeScript type definition for a command's
+  JSON output without running a scan. Useful for understanding the output shape.
+
+  Examples:
+    hardcode-replacer compare src/ --vars theme.css --json
+    hardcode-replacer colors --output-schema
 `);
   });
 
@@ -176,5 +193,23 @@ program
     const config = loadConfig(paths[0] || '.');
     findPatterns(paths, mergeOptions(opts, config));
   });
+
+// Handle --output-schema before parse to bypass required-option validation
+if (process.argv.includes('--output-schema')) {
+  const commands = ['colors', 'tailwind', 'compare', 'patterns'];
+  const cmdName = process.argv.find(arg => commands.includes(arg));
+  if (cmdName) {
+    const schema = getSchema(cmdName);
+    if (schema) {
+      console.log(schema);
+    } else {
+      console.error(`No schema for command: ${cmdName}`);
+    }
+  } else {
+    console.error('Usage: hardcode-replacer <command> --output-schema');
+    console.error('Commands: ' + commands.join(', '));
+  }
+  process.exit(0);
+}
 
 program.parse();

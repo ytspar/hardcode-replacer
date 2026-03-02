@@ -138,7 +138,9 @@ function classifyContext(result) {
   if (matchedValue) {
     const val = matchedValue.toLowerCase();
     if (/^rgba?\(\s*0\s*,\s*0\s*,\s*0[\s,]/.test(val) ||
-        /^rgba?\(\s*255\s*,\s*255\s*,\s*255[\s,]/.test(val)) {
+        /^rgba?\(\s*255\s*,\s*255\s*,\s*255[\s,]/.test(val) ||
+        /^rgb\(\s*0\s+0\s+0\s*\//.test(val) ||
+        /^rgb\(\s*255\s+255\s+255\s*\//.test(val)) {
       return 'effect';
     }
     // #000 / #000000 / #fff / #ffffff in shadow/gradient contexts
