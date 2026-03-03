@@ -79,36 +79,57 @@ section {
   color: var(--poster-red);
 }
 
-/* ── Hero — faithful "der Film" poster layout ─────── */
+/* ── Hero — CSS Grid for stable proportional layout ── */
 .hero {
   height: 100vh;
   min-height: 900px;
-  position: relative;
   overflow: hidden;
   background: var(--poster-bg);
   font-family: var(--akzidenz);
+
+  /* 4-row grid: empty space | title | gap | bottom content
+     Title and bottom content sit lower, with title directly above tagline. */
+  display: grid;
+  grid-template-rows: 6fr auto 0.5fr auto;
+  grid-template-columns: 1fr;
+}
+
+.hero-accent-text {
+  font-family: var(--akzidenz);
+  font-size: clamp(0.9rem, 1.6vw, 1.15rem);
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  color: var(--poster-red);
+  line-height: 1.2;
+}
+
+.hero-accent-text + .hero-accent-text {
+  margin-top: 0.6em;
+}
+
+.hero-label .hero-accent-text:first-child {
+  font-weight: 600;
+  font-size: clamp(1rem, 1.8vw, 1.25rem);
+}
+
+.hero-label .hero-accent-text + .hero-accent-text {
+  margin-top: -0.15em;
 }
 
 .hero-label {
-  position: absolute;
-  top: 7%;
-  left: 29%;
+  grid-row: 1;
+  align-self: start;
+  justify-self: start;
+  margin-top: 3%;
+  margin-left: 29%;
   z-index: 3;
-  color: var(--poster-red);
-  font-family: var(--akzidenz);
-  font-size: clamp(1.1rem, 2.2vw, 1.8rem);
-  font-weight: 500;
-  letter-spacing: 0.02em;
-  line-height: 1.5;
   opacity: 0;
   animation: fade-in 1s 0.3s var(--ease-out-expo) forwards;
 }
 
 .hero-title {
-  position: absolute;
-  bottom: 42%;
-  left: 0;
-  right: 0;
+  grid-row: 2;
+  align-self: end;
   z-index: 2;
   display: flex;
   align-items: baseline;
@@ -117,8 +138,14 @@ section {
   white-space: nowrap;
 }
 
+.hero-title-wrapper {
+  display: flex;
+  align-items: baseline;
+  white-space: nowrap;
+}
+
 .hero-title-top {
-  font-size: 14vw;
+  font-size: 18vw;
   font-weight: 700;
   line-height: 1;
   letter-spacing: -0.02em;
@@ -126,13 +153,13 @@ section {
   color: var(--poster-gray);
   position: relative;
   z-index: 1;
-  margin-right: -0.6em;
+  margin-right: -2.5em;
   flex-shrink: 0;
   transition: color 0.5s var(--ease-out-expo);
 }
 
 .hero-title-bottom {
-  font-size: 14vw;
+  font-size: 18vw;
   font-weight: 700;
   line-height: 1;
   letter-spacing: -0.03em;
@@ -160,21 +187,17 @@ section {
 }
 
 .hero-bottom {
-  position: absolute;
-  bottom: 4%;
-  left: 29%;
-  right: 5%;
+  grid-row: 4;
+  align-self: end;
+  margin-left: 29%;
+  margin-right: 5%;
+  padding-bottom: 4%;
   z-index: 3;
 }
 
 .hero-tagline {
-  font-family: var(--akzidenz);
-  font-size: clamp(1.1rem, 2.2vw, 1.8rem);
-  color: var(--poster-red);
-  font-weight: 500;
-  letter-spacing: 0.02em;
-  line-height: 1.5;
-  margin-bottom: 1.25rem;
+  line-height: 1.2;
+  margin-bottom: 1rem;
   opacity: 0;
   animation: slide-up 0.8s 0.8s var(--ease-out-expo) forwards;
 }
@@ -186,8 +209,8 @@ section {
   gap: 0.3rem 1.5rem;
   opacity: 0;
   animation: slide-up 0.8s 1s var(--ease-out-expo) forwards;
-  margin-bottom: 1.25rem;
-  min-height: 3.2em;
+  margin-bottom: 0.75rem;
+  min-height: 2.8em;
 }
 
 .hero-row {
@@ -198,7 +221,7 @@ section {
   cursor: pointer;
   transition: background 0.15s;
   font-family: var(--mono);
-  font-size: clamp(0.8rem, 1.4vw, 1rem);
+  font-size: clamp(0.7rem, 1.1vw, 0.85rem);
   font-weight: 400;
   color: var(--poster-red);
 }
@@ -269,8 +292,8 @@ section {
 
 .hero-btn {
   font-family: var(--akzidenz);
-  font-size: 1.05rem;
-  padding: 0.75rem 1.6rem;
+  font-size: 0.85rem;
+  padding: 0.5rem 1.2rem;
   background: transparent;
   border: 1px solid var(--poster-gray);
   color: var(--poster-gray);
@@ -791,31 +814,44 @@ section {
 }
 
 /* ── Responsive ───────────────────────────────────── */
-@media (min-width: 1800px) {
-  .hero-title {
-    bottom: 46%;
-  }
-}
-
-@media (min-width: 1400px) and (max-width: 1799px) {
-  .hero-title {
-    bottom: 44%;
-  }
-}
-
 @media (max-width: 768px) {
-  .hero-label {
-    top: 3%;
-    left: 5%;
+  .hero {
+    grid-template-rows: 7.5fr auto 0.25fr auto;
   }
 
-  .hero-title {
-    bottom: 45%;
+  .hero-accent-text {
+    font-size: clamp(1.05rem, 2.2vw, 1.35rem);
+  }
+
+  .hero-title-wrapper {
+    width: 100%;
+    display: flex;
+    align-items: baseline;
+  }
+
+  .hero-title-top {
+    width: 50vw;
+    font-size: 28vw;
+    margin-right: -38vw;
+    text-align: left;
+    flex-shrink: 0;
+  }
+
+  .hero-title-bottom {
+    width: 50vw;
+    font-size: 28vw;
+    text-align: right;
+    flex-shrink: 0;
+  }
+
+  .hero-label {
+    margin-top: 5%;
+    margin-left: 5%;
   }
 
   .hero-bottom {
-    left: 5%;
-    right: 5%;
+    margin-left: 5%;
+    margin-right: 5%;
   }
 
   .section-header {
@@ -843,6 +879,12 @@ section {
 
   .demo-legend {
     flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 400px) {
+  .hero-accent-text {
+    font-size: clamp(0.95rem, 2.5vw, 1.1rem);
   }
 }
 

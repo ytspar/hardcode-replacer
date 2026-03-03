@@ -30,8 +30,10 @@ export function mountHero(container: HTMLElement): void {
   const label = document.createElement('div');
   label.className = 'hero-label';
   const labelLine1 = document.createElement('div');
+  labelLine1.className = 'hero-accent-text';
   labelLine1.textContent = 'Hardcode-Replacer';
   const labelLine2 = document.createElement('div');
+  labelLine2.className = 'hero-accent-text';
   labelLine2.textContent = 'V2.1.0';
   label.appendChild(labelLine1);
   label.appendChild(labelLine2);
@@ -42,26 +44,31 @@ export function mountHero(container: HTMLElement): void {
   const title = document.createElement('h1');
   title.className = 'hero-title';
 
+  const titleWrapper = document.createElement('div');
+  titleWrapper.className = 'hero-title-wrapper';
+
   const topWord = createTitleWord('hardcode', 'colors', 'hero-title-top');
   const bottomWord = createTitleWord('Replacer', 'Variables', 'hero-title-bottom');
 
-  title.appendChild(topWord.container);
-  title.appendChild(bottomWord.container);
+  titleWrapper.appendChild(topWord.container);
+  titleWrapper.appendChild(bottomWord.container);
+  title.appendChild(titleWrapper);
   section.appendChild(title);
 
   // Bottom info zone — like the dates/hours at the bottom of the poster
   const bottom = document.createElement('div');
   bottom.className = 'hero-bottom';
 
-  // Tagline in accent color — like the red info text
-  const tagline = document.createElement('p');
+  // Tagline in accent color — like the red info text (same structure as hero-label)
+  const tagline = document.createElement('div');
   tagline.className = 'hero-tagline';
-  const tagline1 = document.createElement('span');
+  const tagline1 = document.createElement('div');
+  tagline1.className = 'hero-accent-text';
   tagline1.textContent = 'A CLI tool for finding hardcoded colors and replacing them with variables.';
-  const tagline2 = document.createElement('span');
+  const tagline2 = document.createElement('div');
+  tagline2.className = 'hero-accent-text';
   tagline2.textContent = 'Especially useful for cleaning up Claude Code generated interfaces.';
   tagline.appendChild(tagline1);
-  tagline.appendChild(document.createElement('br'));
   tagline.appendChild(tagline2);
 
   // Compact playground
