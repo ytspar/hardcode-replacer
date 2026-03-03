@@ -35,7 +35,7 @@ program
     + 'Config: Place .hardcode-replacerrc.json in your project root for defaults.\n'
     + 'Docs:   https://github.com/ytspar/hardcode-replacer'
   )
-  .version('2.1.0')
+  .version(require('../package.json').version)
   .option('--json', 'Output as JSON (shorthand for --format json)')
   .option('--output-schema', 'Print the TypeScript type for this command\'s JSON output and exit');
 

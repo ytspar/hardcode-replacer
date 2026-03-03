@@ -21,6 +21,9 @@
   },
   "scripts": {
     "start": "node bin/hardcode-replacer.js",
+    "site": "npm --prefix site run dev",
+    "site:build": "npm --prefix site run build",
+    "site:preview": "npm --prefix site run preview",
     "test": "jest"
   },
   "keywords": [
@@ -40,5 +43,6 @@
   },
   "engines": {
     "node": ">=18.0.0"
-  }
+  },
+  "sideEffects": false
 }
