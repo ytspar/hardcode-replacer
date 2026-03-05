@@ -8,6 +8,8 @@
 
 **Find and fix hardcoded colors, Tailwind color classes, and repeated class patterns in web codebases.**
 
+**[Website](https://ytspar.github.io/hardcode-replacer/)** · **[npm](https://www.npmjs.com/package/hardcode-replacer)** · **[GitHub](https://github.com/ytspar/hardcode-replacer)**
+
 hardcode-replacer scans your project for hardcoded color values, compares them against your design token / CSS variable palette, and gives you exact replacement code. It understands context — it knows the difference between a color that needs replacing and one that's a theme definition, a canvas fallback, or an effect overlay.
 
 Built for humans and AI coding assistants (Claude, Copilot, Cursor) to use together. Designed to save context window space with pre-classified, actionable output.
