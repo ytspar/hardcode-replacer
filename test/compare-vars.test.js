@@ -1,7 +1,7 @@
-'use strict';
 
-const path = require('path');
-const fs = require('fs');
+
+const path = require('node:path');
+const fs = require('node:fs');
 const { parseVariablesFile } = require('../src/commands/compare-vars');
 
 const FIXTURES = path.join(__dirname, 'fixtures');
@@ -31,8 +31,8 @@ describe('parseVariablesFile', () => {
     try {
       const palette = parseVariablesFile(tmpJson);
       expect(palette).toBeTruthy();
-      expect(palette['primary']).toBe('#3b82f6');
-      expect(palette['danger']).toBe('#ef4444');
+      expect(palette.primary).toBe('#3b82f6');
+      expect(palette.danger).toBe('#ef4444');
       expect(palette['nested.background']).toBe('#f8fafc');
       expect(palette['nested.text']).toBe('#0f172a');
     } finally {
@@ -53,9 +53,9 @@ describe('parseVariablesFile', () => {
     try {
       const palette = parseVariablesFile(tmpJs);
       expect(palette).toBeTruthy();
-      expect(palette['primary']).toBe('#10b981');
-      expect(palette['secondary']).toBe('#6366f1');
-      expect(palette['border']).toBe('#e2e8f0');
+      expect(palette.primary).toBe('#10b981');
+      expect(palette.secondary).toBe('#6366f1');
+      expect(palette.border).toBe('#e2e8f0');
     } finally {
       fs.unlinkSync(tmpJs);
     }

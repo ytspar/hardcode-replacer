@@ -1,12 +1,10 @@
-'use strict';
-
-const { Command } = require('commander');
-const { findColors } = require('./commands/find-colors');
-const { findTailwind } = require('./commands/find-tailwind');
-const { compareVars } = require('./commands/compare-vars');
-const { findPatterns } = require('./commands/find-patterns');
-const { loadConfig, mergeOptions } = require('./config');
-const { getSchema } = require('./output-schemas');
+const { Command } = require("commander");
+const { findColors } = require("./commands/find-colors");
+const { findTailwind } = require("./commands/find-tailwind");
+const { compareVars } = require("./commands/compare-vars");
+const { findPatterns } = require("./commands/find-patterns");
+const { loadConfig, mergeOptions } = require("./config");
+const { getSchema } = require("./output-schemas");
 
 // Helper for repeatable options (--exclude can be used multiple times)
 function collect(val, arr) {
@@ -17,41 +15,44 @@ function collect(val, arr) {
 const program = new Command();
 
 program
-  .name('hardcode-replacer')
+  .name("hardcode-replacer")
   .description(
-    'Find and fix hardcoded colors, Tailwind color classes, and repeated class patterns.\n\n'
-    + 'Scans web codebases for hardcoded color values, compares them against your\n'
-    + 'design token palette, classifies each result by context (actionable vs theme\n'
-    + 'definition vs canvas fallback), and generates exact replacement code.\n\n'
-    + 'Commands:\n'
-    + '  colors    Find all hardcoded color values (hex, rgb, hsl, oklch, named)\n'
-    + '  compare   Compare found colors against a variables file, get replacements\n'
-    + '  tailwind  Find Tailwind color utility classes and arbitrary values\n'
-    + '  patterns  Find repeated className/cn()/clsx() patterns for extraction\n\n'
-    + 'Quick start:\n'
-    + '  $ hardcode-replacer colors src/\n'
-    + '  $ hardcode-replacer compare src/ --vars styles/variables.css\n'
-    + '  $ hardcode-replacer compare src/ --vars styles/variables.css --fix\n\n'
-    + 'Config: Place .hardcode-replacerrc.json in your project root for defaults.\n'
-    + 'Docs:   https://github.com/ytspar/hardcode-replacer'
+    "Find and fix hardcoded colors, Tailwind color classes, and repeated class patterns.\n\n" +
+      "Scans web codebases for hardcoded color values, compares them against your\n" +
+      "design token palette, classifies each result by context (actionable vs theme\n" +
+      "definition vs canvas fallback), and generates exact replacement code.\n\n" +
+      "Commands:\n" +
+      "  colors    Find all hardcoded color values (hex, rgb, hsl, oklch, named)\n" +
+      "  compare   Compare found colors against a variables file, get replacements\n" +
+      "  tailwind  Find Tailwind color utility classes and arbitrary values\n" +
+      "  patterns  Find repeated className/cn()/clsx() patterns for extraction\n\n" +
+      "Quick start:\n" +
+      "  $ hardcode-replacer colors src/\n" +
+      "  $ hardcode-replacer compare src/ --vars styles/variables.css\n" +
+      "  $ hardcode-replacer compare src/ --vars styles/variables.css --fix\n\n" +
+      "Config: Place .hardcode-replacerrc.json in your project root for defaults.\n" +
+      "Docs:   https://github.com/ytspar/hardcode-replacer"
   )
-  .version(require('../package.json').version)
-  .option('--json', 'Output as JSON (shorthand for --format json)')
-  .option('--output-schema', 'Print the TypeScript type for this command\'s JSON output and exit');
+  .version(require("../package.json").version)
+  .option("--json", "Output as JSON (shorthand for --format json)")
+  .option(
+    "--output-schema",
+    "Print the TypeScript type for this command's JSON output and exit"
+  );
 
-program.hook('preAction', (thisCommand, actionCommand) => {
+program.hook("preAction", (_thisCommand, actionCommand) => {
   const globalOpts = program.opts();
 
   // --json: set format to 'json'
   if (globalOpts.json) {
-    actionCommand.setOptionValue('format', 'json');
+    actionCommand.setOptionValue("format", "json");
   }
 });
 
 // === guide command ===
 program
-  .command('guide')
-  .description('Show a detailed usage guide for humans and AI assistants')
+  .command("guide")
+  .description("Show a detailed usage guide for humans and AI assistants")
   .action(() => {
     console.log(`
 HARDCODE-REPLACER — Usage Guide
@@ -134,70 +135,112 @@ FOR AI ASSISTANTS
 
 // === colors command ===
 program
-  .command('colors')
-  .description('Find hardcoded color values (hex, rgb, hsl, oklch, named, etc.)')
-  .argument('[paths...]', 'Paths to search (files or directories)', ['.'])
-  .option('--include <glob>', 'File glob pattern to include (e.g., "*.tsx")')
-  .option('--exclude <glob...>', 'File glob patterns to exclude (repeatable)', collect, [])
-  .option('--format <format>', 'Output format: text or json', 'text')
-  .option('--no-named', 'Skip named CSS color detection (red, blue, etc.)')
+  .command("colors")
+  .description(
+    "Find hardcoded color values (hex, rgb, hsl, oklch, named, etc.)"
+  )
+  .argument("[paths...]", "Paths to search (files or directories)", ["."])
+  .option("--include <glob>", 'File glob pattern to include (e.g., "*.tsx")')
+  .option(
+    "--exclude <glob...>",
+    "File glob patterns to exclude (repeatable)",
+    collect,
+    []
+  )
+  .option("--format <format>", "Output format: text or json", "text")
+  .option("--no-named", "Skip named CSS color detection (red, blue, etc.)")
   .action((paths, opts) => {
-    const config = loadConfig(paths[0] || '.');
+    const config = loadConfig(paths[0] || ".");
     findColors(paths, mergeOptions(opts, config));
   });
 
 // === tailwind command ===
 program
-  .command('tailwind')
-  .description('Find Tailwind CSS color classes and arbitrary color values')
-  .argument('[paths...]', 'Paths to search (files or directories)', ['.'])
-  .option('--include <glob>', 'File glob pattern to include')
-  .option('--exclude <glob...>', 'File glob patterns to exclude (repeatable)', collect, [])
-  .option('--format <format>', 'Output format: text or json', 'text')
-  .option('--vars <file>', 'Compare arbitrary values (bg-[#hex]) against a palette')
-  .option('--threshold <number>', 'Delta-E threshold for arbitrary value matching', '10')
+  .command("tailwind")
+  .description("Find Tailwind CSS color classes and arbitrary color values")
+  .argument("[paths...]", "Paths to search (files or directories)", ["."])
+  .option("--include <glob>", "File glob pattern to include")
+  .option(
+    "--exclude <glob...>",
+    "File glob patterns to exclude (repeatable)",
+    collect,
+    []
+  )
+  .option("--format <format>", "Output format: text or json", "text")
+  .option(
+    "--vars <file>",
+    "Compare arbitrary values (bg-[#hex]) against a palette"
+  )
+  .option(
+    "--threshold <number>",
+    "Delta-E threshold for arbitrary value matching",
+    "10"
+  )
   .action((paths, opts) => {
-    const config = loadConfig(paths[0] || '.');
+    const config = loadConfig(paths[0] || ".");
     findTailwind(paths, mergeOptions(opts, config));
   });
 
 // === compare command ===
 program
-  .command('compare')
-  .description('Compare colors against a variables file — get exact replacement code')
-  .argument('[paths...]', 'Paths to search for hardcoded colors', ['.'])
-  .requiredOption('--vars <file>', 'Path to variables file (CSS, JSON, JS, or TS)')
-  .option('--threshold <number>', 'Delta-E threshold for "close" match (default: 10)', '10')
-  .option('--include <glob>', 'File glob pattern to include')
-  .option('--exclude <glob...>', 'File glob patterns to exclude (repeatable)', collect, [])
-  .option('--format <format>', 'Output format: text or json', 'text')
-  .option('--fix', 'Auto-replace exact matches with var() / color-mix()')
-  .option('--baseline <file>', 'Save results to a baseline JSON file')
-  .option('--diff <file>', 'Show only new issues vs a previous baseline')
+  .command("compare")
+  .description(
+    "Compare colors against a variables file — get exact replacement code"
+  )
+  .argument("[paths...]", "Paths to search for hardcoded colors", ["."])
+  .requiredOption(
+    "--vars <file>",
+    "Path to variables file (CSS, JSON, JS, or TS)"
+  )
+  .option(
+    "--threshold <number>",
+    'Delta-E threshold for "close" match (default: 10)',
+    "10"
+  )
+  .option("--include <glob>", "File glob pattern to include")
+  .option(
+    "--exclude <glob...>",
+    "File glob patterns to exclude (repeatable)",
+    collect,
+    []
+  )
+  .option("--format <format>", "Output format: text or json", "text")
+  .option("--fix", "Auto-replace exact matches with var() / color-mix()")
+  .option("--baseline <file>", "Save results to a baseline JSON file")
+  .option("--diff <file>", "Show only new issues vs a previous baseline")
   .action((paths, opts) => {
-    const config = loadConfig(paths[0] || '.');
+    const config = loadConfig(paths[0] || ".");
     compareVars(paths, mergeOptions(opts, config));
   });
 
 // === patterns command ===
 program
-  .command('patterns')
-  .description('Find repeated className/cn()/clsx() patterns for extraction')
-  .argument('[paths...]', 'Paths to search (files or directories)', ['.'])
-  .option('--min-count <number>', 'Minimum occurrences to report', '2')
-  .option('--min-classes <number>', 'Minimum classes in a pattern to report', '2')
-  .option('--include <glob>', 'File glob pattern to include')
-  .option('--exclude <glob...>', 'File glob patterns to exclude (repeatable)', collect, [])
-  .option('--format <format>', 'Output format: text or json', 'text')
+  .command("patterns")
+  .description("Find repeated className/cn()/clsx() patterns for extraction")
+  .argument("[paths...]", "Paths to search (files or directories)", ["."])
+  .option("--min-count <number>", "Minimum occurrences to report", "2")
+  .option(
+    "--min-classes <number>",
+    "Minimum classes in a pattern to report",
+    "2"
+  )
+  .option("--include <glob>", "File glob pattern to include")
+  .option(
+    "--exclude <glob...>",
+    "File glob patterns to exclude (repeatable)",
+    collect,
+    []
+  )
+  .option("--format <format>", "Output format: text or json", "text")
   .action((paths, opts) => {
-    const config = loadConfig(paths[0] || '.');
+    const config = loadConfig(paths[0] || ".");
     findPatterns(paths, mergeOptions(opts, config));
   });
 
 // Handle --output-schema before parse to bypass required-option validation
-if (process.argv.includes('--output-schema')) {
-  const commands = ['colors', 'tailwind', 'compare', 'patterns'];
-  const cmdName = process.argv.find(arg => commands.includes(arg));
+if (process.argv.includes("--output-schema")) {
+  const commands = ["colors", "tailwind", "compare", "patterns"];
+  const cmdName = process.argv.find((arg) => commands.includes(arg));
   if (cmdName) {
     const schema = getSchema(cmdName);
     if (schema) {
@@ -206,8 +249,8 @@ if (process.argv.includes('--output-schema')) {
       console.error(`No schema for command: ${cmdName}`);
     }
   } else {
-    console.error('Usage: hardcode-replacer <command> --output-schema');
-    console.error('Commands: ' + commands.join(', '));
+    console.error("Usage: hardcode-replacer <command> --output-schema");
+    console.error(`Commands: ${commands.join(", ")}`);
   }
   process.exit(0);
 }

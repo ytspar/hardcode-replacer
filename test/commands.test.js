@@ -1,6 +1,6 @@
-'use strict';
 
-const path = require('path');
+
+const path = require('node:path');
 const { findColors } = require('../src/commands/find-colors');
 const { findTailwind } = require('../src/commands/find-tailwind');
 const { findPatterns } = require('../src/commands/find-patterns');

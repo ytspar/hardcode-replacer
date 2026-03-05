@@ -1,10 +1,10 @@
-import { defineConfig } from 'vite';
+import { defineConfig } from "vite";
 
 export default defineConfig({
-  base: process.env.VITE_BASE_URL || '/',
-  root: '.',
+  base: process.env.VITE_BASE_URL || "/",
+  root: ".",
   build: {
-    outDir: 'dist',
+    outDir: "dist",
     emptyOutDir: true,
   },
 });

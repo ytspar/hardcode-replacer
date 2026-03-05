@@ -1,7 +1,7 @@
-'use strict';
 
-const path = require('path');
-const fs = require('fs');
+
+const path = require('node:path');
+const fs = require('node:fs');
 const { loadConfig, mergeOptions } = require('../src/config');
 
 const FIXTURES = path.join(__dirname, 'fixtures');
@@ -40,7 +40,7 @@ describe('mergeOptions', () => {
   });
 
   test('config.json does not override explicit --format', () => {
-    const cli = { format: 'text', exclude: [] };
+    const _cli = { format: 'text', exclude: [] };
     // If the user passed --format text explicitly, we can't distinguish
     // from the default. But if format is already 'json', config.json won't downgrade.
     const cli2 = { format: 'json', exclude: [] };

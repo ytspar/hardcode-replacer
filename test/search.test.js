@@ -1,6 +1,6 @@
-'use strict';
 
-const path = require('path');
+
+const path = require('node:path');
 const { search } = require('../src/search');
 
 const FIXTURES = path.join(__dirname, 'fixtures');
@@ -71,7 +71,7 @@ describe('search', () => {
   test('search is case insensitive by default', () => {
     const results = search('#[a-f]{3,6}\\b', [sampleFile]);
     // Should match both uppercase and lowercase hex chars
-    const hasLower = results.some(r => /[a-f]/.test(r.text));
+    const _hasLower = results.some(r => /[a-f]/.test(r.text));
     // At minimum we should get results
     expect(results.length).toBeGreaterThanOrEqual(0);
   });

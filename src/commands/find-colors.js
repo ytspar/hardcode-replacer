@@ -1,11 +1,22 @@
-'use strict';
+const { search } = require("../search");
+const {
+  buildColorSearchPattern,
+  CSS_COLOR_PROPERTIES,
+  JS_COLOR_PROPERTIES,
+} = require("../color-patterns");
+const { NAMED_COLORS, NAMED_COLOR_SET } = require("../css-named-colors");
+const { classifyColor, normalizeToHex } = require("../color-utils");
+const {
+  classifyContext,
+  contextLabel,
+  isActionable,
+  clearCache,
+  isInBlockComment,
+} = require("../context-classifier");
+const { groupByFile, countByKey } = require("../utils");
 
-const { search } = require('../search');
-const { buildColorSearchPattern, CSS_COLOR_PROPERTIES, JS_COLOR_PROPERTIES } = require('../color-patterns');
-const { NAMED_COLORS, NAMED_COLOR_SET } = require('../css-named-colors');
-const { classifyColor, normalizeToHex } = require('../color-utils');
-const { classifyContext, contextLabel, isActionable, clearCache, isInBlockComment } = require('../context-classifier');
-const { groupByFile, countByKey } = require('../utils');
+const TYPE_ANNOTATION_RE = /:\s*(string|number|boolean|void|any)\b/;
+const NAMED_COLOR_EXTRACT_RE = /:\s*['"]?([a-zA-Z]+)['"]?\s*[;,}]?\s*$/;
 
 /**
  * Find all hardcoded color values in source files.
@@ -30,18 +41,36 @@ function findColors(paths, options) {
     const type = classifyColor(match);
 
     // Skip non-color matches
-    if (type === 'unknown') continue;
+    if (type === "unknown") {
+      continue;
+    }
 
     // Skip colors in comments (single-line and multi-line block comments)
     const trimmedText = result.text.trimStart();
-    if (trimmedText.startsWith('//') || trimmedText.startsWith('*') || trimmedText.startsWith('/*')) continue;
-    if (isInBlockComment(result.file, result.line)) continue;
+    if (
+      trimmedText.startsWith("//") ||
+      trimmedText.startsWith("*") ||
+      trimmedText.startsWith("/*")
+    ) {
+      continue;
+    }
+    if (isInBlockComment(result.file, result.line)) {
+      continue;
+    }
 
     // Skip template literal interpolations (e.g., `rgba(${r}, ${g}, ${b})`)
-    if (match.includes('${')) continue;
+    if (match.includes("${")) {
+      continue;
+    }
 
     // Skip matches that are clearly type annotations or function signatures
-    if (/:\s*(string|number|boolean|void|any)\b/.test(result.text) && !result.text.includes("'") && !result.text.includes('"')) continue;
+    if (
+      TYPE_ANNOTATION_RE.test(result.text) &&
+      !result.text.includes("'") &&
+      !result.text.includes('"')
+    ) {
+      continue;
+    }
 
     const ctx = classifyContext(result);
     results.push({
@@ -66,18 +95,23 @@ function findColors(paths, options) {
 
   // Deduplicate by file:line:column
   const seen = new Set();
-  const deduped = results.filter(r => {
+  const deduped = results.filter((r) => {
     const key = `${r.file}:${r.line}:${r.column}`;
-    if (seen.has(key)) return false;
+    if (seen.has(key)) {
+      return false;
+    }
     seen.add(key);
     return true;
   });
 
   // Sort by file, then line
-  deduped.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line || a.column - b.column);
+  deduped.sort(
+    (a, b) =>
+      a.file.localeCompare(b.file) || a.line - b.line || a.column - b.column
+  );
 
   // Output
-  if (options.format === 'json') {
+  if (options.format === "json") {
     outputJson(deduped);
   } else {
     outputText(deduped);
@@ -91,8 +125,8 @@ function findNamedColors(paths, options) {
   const results = [];
 
   // Build a pattern matching CSS color properties followed by a word
-  const cssProps = CSS_COLOR_PROPERTIES.join('|');
-  const jsProps = JS_COLOR_PROPERTIES.join('|');
+  const cssProps = CSS_COLOR_PROPERTIES.join("|");
+  const jsProps = JS_COLOR_PROPERTIES.join("|");
 
   // CSS context: color: red; background-color: blue;
   const cssPattern = `(${cssProps})\\s*:\\s*([a-zA-Z]+)`;
@@ -109,18 +143,41 @@ function findNamedColors(paths, options) {
     for (const result of rawResults) {
       // Extract the color name from the match
       const matchStr = result.match || result.text;
-      const colorMatch = matchStr.match(/:\s*['"]?([a-zA-Z]+)['"]?\s*[;,}]?\s*$/);
-      if (!colorMatch) continue;
+      const colorMatch = matchStr.match(NAMED_COLOR_EXTRACT_RE);
+      if (!colorMatch) {
+        continue;
+      }
 
       const colorName = colorMatch[1].toLowerCase();
-      if (!NAMED_COLOR_SET.has(colorName)) continue;
+      if (!NAMED_COLOR_SET.has(colorName)) {
+        continue;
+      }
 
       // Skip common false positives
-      if (['inherit', 'initial', 'unset', 'revert', 'currentcolor', 'transparent', 'none', 'auto'].includes(colorName)) continue;
+      if (
+        [
+          "inherit",
+          "initial",
+          "unset",
+          "revert",
+          "currentcolor",
+          "transparent",
+          "none",
+          "auto",
+        ].includes(colorName)
+      ) {
+        continue;
+      }
 
       // Skip if in a comment
       const trimmedText = result.text.trimStart();
-      if (trimmedText.startsWith('//') || trimmedText.startsWith('*') || trimmedText.startsWith('/*')) continue;
+      if (
+        trimmedText.startsWith("//") ||
+        trimmedText.startsWith("*") ||
+        trimmedText.startsWith("/*")
+      ) {
+        continue;
+      }
 
       const ctx = classifyContext(result);
       results.push({
@@ -128,7 +185,7 @@ function findNamedColors(paths, options) {
         line: result.line,
         column: result.column,
         value: colorName,
-        type: 'named',
+        type: "named",
         hex: NAMED_COLORS[colorName] || null,
         lineText: result.text.trim(),
         context: ctx,
@@ -145,17 +202,17 @@ function findNamedColors(paths, options) {
  * Output results in JSON format.
  */
 function outputJson(results) {
-  const actionable = results.filter(r => r.actionable);
-  const skipped = results.filter(r => !r.actionable);
+  const actionable = results.filter((r) => r.actionable);
+  const skipped = results.filter((r) => !r.actionable);
   const output = {
-    command: 'colors',
+    command: "colors",
     summary: {
       totalColors: results.length,
       actionable: actionable.length,
       skipped: skipped.length,
-      totalFiles: new Set(results.map(r => r.file)).size,
+      totalFiles: new Set(results.map((r) => r.file)).size,
       byType: countByType(results),
-      skippedByContext: countByKey(skipped, 'context'),
+      skippedByContext: countByKey(skipped, "context"),
     },
     actionable: groupByFile(actionable),
     skipped: groupByFile(skipped),
@@ -165,19 +222,25 @@ function outputJson(results) {
 
 function outputText(results) {
   if (results.length === 0) {
-    console.log('No hardcoded color values found.');
+    console.log("No hardcoded color values found.");
     return;
   }
 
-  const actionable = results.filter(r => r.actionable);
-  const skipped = results.filter(r => !r.actionable);
-  const fileCount = new Set(results.map(r => r.file)).size;
+  const actionable = results.filter((r) => r.actionable);
+  const skipped = results.filter((r) => !r.actionable);
+  const fileCount = new Set(results.map((r) => r.file)).size;
   const typeCount = countByType(results);
 
-  console.log(`\n=== Hardcoded Colors ===`);
-  console.log(`Found ${results.length} hardcoded color values in ${fileCount} files`);
+  console.log("\n=== Hardcoded Colors ===");
+  console.log(
+    `Found ${results.length} hardcoded color values in ${fileCount} files`
+  );
   console.log(`Actionable: ${actionable.length} | Skipped: ${skipped.length}`);
-  console.log(`Types: ${Object.entries(typeCount).map(([k, v]) => `${k}(${v})`).join(', ')}\n`);
+  console.log(
+    `Types: ${Object.entries(typeCount)
+      .map(([k, v]) => `${k}(${v})`)
+      .join(", ")}\n`
+  );
 
   // Actionable results first
   if (actionable.length > 0) {
@@ -185,23 +248,25 @@ function outputText(results) {
     for (const [file, fileResults] of Object.entries(grouped)) {
       console.log(`FILE: ${file}`);
       for (const r of fileResults) {
-        const hex = r.hex ? ` -> ${r.hex}` : '';
+        const hex = r.hex ? ` -> ${r.hex}` : "";
         console.log(`  L${r.line}:${r.column}  ${r.value}  (${r.type}${hex})`);
         console.log(`    ${r.lineText}`);
       }
-      console.log('');
+      console.log("");
     }
   }
 
   // Collapsed summary of skipped
   if (skipped.length > 0) {
-    const byCtx = countByKey(skipped, 'contextLabel');
+    const byCtx = countByKey(skipped, "contextLabel");
     console.log(`--- Skipped ${skipped.length} non-actionable colors ---`);
     for (const [ctx, count] of Object.entries(byCtx)) {
-      const files = new Set(skipped.filter(r => r.contextLabel === ctx).map(r => r.file));
+      const files = new Set(
+        skipped.filter((r) => r.contextLabel === ctx).map((r) => r.file)
+      );
       console.log(`  [${ctx}] ${count} colors in ${files.size} files`);
     }
-    console.log('');
+    console.log("");
   }
 }
 

@@ -1,13 +1,11 @@
-'use strict';
-
-const fs = require('fs');
-const path = require('path');
+const fs = require("node:fs");
+const path = require("node:path");
 
 const CONFIG_FILES = [
-  '.hardcode-replacerrc.json',
-  '.hardcode-replacerrc',
-  'hardcode-replacer.config.js',
-  'hardcode-replacer.config.cjs',
+  ".hardcode-replacerrc.json",
+  ".hardcode-replacerrc",
+  "hardcode-replacer.config.js",
+  "hardcode-replacer.config.cjs",
 ];
 
 /**
@@ -27,7 +25,7 @@ const CONFIG_FILES = [
  * }
  */
 function loadConfig(startDir) {
-  const dir = path.resolve(startDir || '.');
+  const dir = path.resolve(startDir || ".");
   const config = findConfigFile(dir);
   return config || {};
 }
@@ -44,7 +42,9 @@ function findConfigFile(dir) {
     }
 
     const parent = path.dirname(current);
-    if (parent === current) break; // reached root
+    if (parent === current) {
+      break; // reached root
+    }
     current = parent;
   }
 
@@ -54,7 +54,7 @@ function findConfigFile(dir) {
 function parseConfigFile(filepath) {
   const ext = path.extname(filepath).toLowerCase();
 
-  if (ext === '.js' || ext === '.cjs') {
+  if (ext === ".js" || ext === ".cjs") {
     try {
       return require(filepath);
     } catch {
@@ -64,7 +64,7 @@ function parseConfigFile(filepath) {
 
   // JSON or .hardcode-replacerrc (treat as JSON)
   try {
-    const content = fs.readFileSync(filepath, 'utf-8');
+    const content = fs.readFileSync(filepath, "utf-8");
     return JSON.parse(content);
   } catch {
     return null;
@@ -80,7 +80,9 @@ function mergeOptions(cliOpts, config) {
 
   // Only apply config values when CLI didn't set them
   if (config.exclude && (!merged.exclude || merged.exclude.length === 0)) {
-    merged.exclude = Array.isArray(config.exclude) ? config.exclude : [config.exclude];
+    merged.exclude = Array.isArray(config.exclude)
+      ? config.exclude
+      : [config.exclude];
   }
   if (config.include && !merged.include) {
     merged.include = config.include;
@@ -88,23 +90,23 @@ function mergeOptions(cliOpts, config) {
   if (config.vars && !merged.vars) {
     merged.vars = config.vars;
   }
-  if (config.threshold != null && merged.threshold === '10') {
+  if (config.threshold != null && merged.threshold === "10") {
     merged.threshold = String(config.threshold);
   }
   if (config.named === false && merged.named !== false) {
     merged.named = false;
   }
-  if (config.minCount && merged.minCount === '2') {
+  if (config.minCount && merged.minCount === "2") {
     merged.minCount = String(config.minCount);
   }
-  if (config.minClasses && merged.minClasses === '2') {
+  if (config.minClasses && merged.minClasses === "2") {
     merged.minClasses = String(config.minClasses);
   }
   if (config.tailwindVersion) {
     merged.tailwindVersion = config.tailwindVersion;
   }
-  if (config.json === true && merged.format === 'text') {
-    merged.format = 'json';
+  if (config.json === true && merged.format === "text") {
+    merged.format = "json";
   }
 
   return merged;

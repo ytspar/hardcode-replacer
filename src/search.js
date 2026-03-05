@@ -1,14 +1,16 @@
-'use strict';
+const { execFileSync } = require("node:child_process");
+const { DEFAULT_FILE_TYPES } = require("./color-patterns");
 
-const { execFileSync } = require('child_process');
-const { DEFAULT_FILE_TYPES } = require('./color-patterns');
+const GREP_LINE_RE = /^(.+?):(\d+):(.*)$/;
 
 // Check if ripgrep is available (memoized)
 let _hasRipgrep = null;
 function hasRipgrep() {
-  if (_hasRipgrep !== null) return _hasRipgrep;
+  if (_hasRipgrep !== null) {
+    return _hasRipgrep;
+  }
   try {
-    execFileSync('rg', ['--version'], { stdio: 'pipe' });
+    execFileSync("rg", ["--version"], { stdio: "pipe" });
     _hasRipgrep = true;
   } catch {
     _hasRipgrep = false;
@@ -26,57 +28,59 @@ function searchWithRipgrep(pattern, paths, options = {}) {
   const args = [];
 
   // Output format: JSON for structured parsing
-  args.push('--json');
+  args.push("--json");
 
   // Case insensitive by default for color matching
   if (options.caseSensitive !== true) {
-    args.push('-i');
+    args.push("-i");
   }
 
   // File type filtering
   if (options.include) {
-    args.push('--glob', options.include);
+    args.push("--glob", options.include);
   } else {
     // Default to web file types
     for (const ext of DEFAULT_FILE_TYPES) {
-      args.push('--glob', `**/*.${ext}`);
+      args.push("--glob", `**/*.${ext}`);
     }
   }
 
   if (options.exclude) {
-    const excludes = Array.isArray(options.exclude) ? options.exclude : [options.exclude];
+    const excludes = Array.isArray(options.exclude)
+      ? options.exclude
+      : [options.exclude];
     for (const exc of excludes) {
-      args.push('--glob', `!${exc}`);
+      args.push("--glob", `!${exc}`);
     }
   }
 
   // Always exclude common non-source directories
-  args.push('--glob', '!node_modules/**');
-  args.push('--glob', '!.git/**');
-  args.push('--glob', '!dist/**');
-  args.push('--glob', '!build/**');
-  args.push('--glob', '!coverage/**');
-  args.push('--glob', '!.next/**');
-  args.push('--glob', '!*.min.js');
-  args.push('--glob', '!*.min.css');
-  args.push('--glob', '!*.map');
-  args.push('--glob', '!package-lock.json');
-  args.push('--glob', '!yarn.lock');
-  args.push('--glob', '!pnpm-lock.yaml');
-  args.push('--glob', '!bun.lockb');
+  args.push("--glob", "!node_modules/**");
+  args.push("--glob", "!.git/**");
+  args.push("--glob", "!dist/**");
+  args.push("--glob", "!build/**");
+  args.push("--glob", "!coverage/**");
+  args.push("--glob", "!.next/**");
+  args.push("--glob", "!*.min.js");
+  args.push("--glob", "!*.min.css");
+  args.push("--glob", "!*.map");
+  args.push("--glob", "!package-lock.json");
+  args.push("--glob", "!yarn.lock");
+  args.push("--glob", "!pnpm-lock.yaml");
+  args.push("--glob", "!bun.lockb");
 
   // Add the pattern
-  args.push('-e', pattern);
+  args.push("-e", pattern);
 
   // Add search paths
-  const searchPaths = paths.length > 0 ? paths : ['.'];
+  const searchPaths = paths.length > 0 ? paths : ["."];
   args.push(...searchPaths);
 
   try {
-    const result = execFileSync('rg', args, {
-      encoding: 'utf-8',
+    const result = execFileSync("rg", args, {
+      encoding: "utf-8",
       maxBuffer: 50 * 1024 * 1024, // 50MB buffer
-      stdio: ['pipe', 'pipe', 'pipe'],
+      stdio: ["pipe", "pipe", "pipe"],
     });
 
     return parseRipgrepJson(result);
@@ -98,16 +102,16 @@ function searchWithRipgrep(pattern, paths, options = {}) {
  */
 function parseRipgrepJson(output) {
   const results = [];
-  const lines = output.trim().split('\n').filter(Boolean);
+  const lines = output.trim().split("\n").filter(Boolean);
 
   for (const line of lines) {
     try {
       const data = JSON.parse(line);
-      if (data.type === 'match') {
+      if (data.type === "match") {
         const d = data.data;
-        const file = d.path?.text || '';
+        const file = d.path?.text || "";
         const lineNum = d.line_number;
-        const text = d.lines?.text?.trimEnd() || '';
+        const text = d.lines?.text?.trimEnd() || "";
 
         // Extract each submatch
         for (const sub of d.submatches || []) {
@@ -115,7 +119,7 @@ function parseRipgrepJson(output) {
             file,
             line: lineNum,
             column: sub.start + 1, // 1-indexed
-            match: sub.match?.text || '',
+            match: sub.match?.text || "",
             text,
           });
         }
@@ -133,41 +137,43 @@ function parseRipgrepJson(output) {
  * Uses execFileSync (no shell) to avoid command injection.
  */
 function searchWithGrep(pattern, paths, options = {}) {
-  const searchPaths = paths.length > 0 ? paths : ['.'];
-  const args = ['-rn', '-E'];
+  const searchPaths = paths.length > 0 ? paths : ["."];
+  const args = ["-rn", "-E"];
 
   if (options.caseSensitive !== true) {
-    args.push('-i');
+    args.push("-i");
   }
 
   // Build include patterns
   const fileTypes = options.fileTypes || DEFAULT_FILE_TYPES;
   for (const ext of fileTypes) {
-    args.push('--include', `*.${ext}`);
+    args.push("--include", `*.${ext}`);
   }
 
   args.push(
-    '--exclude-dir=node_modules',
-    '--exclude-dir=.git',
-    '--exclude-dir=dist',
-    '--exclude-dir=build',
-    '--exclude-dir=coverage',
-    '--exclude-dir=.next',
+    "--exclude-dir=node_modules",
+    "--exclude-dir=.git",
+    "--exclude-dir=dist",
+    "--exclude-dir=build",
+    "--exclude-dir=coverage",
+    "--exclude-dir=.next"
   );
 
   args.push(pattern);
   args.push(...searchPaths);
 
   try {
-    const result = execFileSync('grep', args, {
-      encoding: 'utf-8',
+    const result = execFileSync("grep", args, {
+      encoding: "utf-8",
       maxBuffer: 50 * 1024 * 1024,
-      stdio: ['pipe', 'pipe', 'pipe'],
+      stdio: ["pipe", "pipe", "pipe"],
     });
 
     return parseGrepOutput(result);
   } catch (err) {
-    if (err.status === 1) return [];
+    if (err.status === 1) {
+      return [];
+    }
     throw new Error(`grep error: ${err.stderr || err.message}`);
   }
 }
@@ -177,16 +183,16 @@ function searchWithGrep(pattern, paths, options = {}) {
  */
 function parseGrepOutput(output) {
   const results = [];
-  const lines = output.trim().split('\n').filter(Boolean);
+  const lines = output.trim().split("\n").filter(Boolean);
 
   for (const line of lines) {
-    const match = line.match(/^(.+?):(\d+):(.*)$/);
+    const match = line.match(GREP_LINE_RE);
     if (match) {
       results.push({
         file: match[1],
-        line: parseInt(match[2], 10),
+        line: Number.parseInt(match[2], 10),
         column: 1,
-        match: '',
+        match: "",
         text: match[3],
       });
     }

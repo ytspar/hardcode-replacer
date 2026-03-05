@@ -1,5 +1,3 @@
-'use strict';
-
 const schemas = {
   colors: `type ColorsOutput = {
   command: 'colors';

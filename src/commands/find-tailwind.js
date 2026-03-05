@@ -1,11 +1,44 @@
-'use strict';
+const fs = require("node:fs");
+const path = require("node:path");
+const { search } = require("../search");
+const {
+  buildTailwindColorPattern,
+  SPECIAL_COLORS,
+  detectTailwindVersion,
+  parseTailwindV4Theme,
+  TAILWIND_V4_PATTERNS,
+} = require("../tailwind-colors");
+const { normalizeToHex, findNearestColor } = require("../color-utils");
+const { groupByFile, countByKey } = require("../utils");
 
-const fs = require('fs');
-const path = require('path');
-const { search } = require('../search');
-const { buildTailwindColorPattern, SPECIAL_COLORS, detectTailwindVersion, parseTailwindV4Theme, TAILWIND_V4_PATTERNS } = require('../tailwind-colors');
-const { normalizeToHex, findNearestColor } = require('../color-utils');
-const { groupByFile, countByKey } = require('../utils');
+const CSS_FILE_RE = /\.css$/;
+const ARB_VALUE_RE = /^(\w+)-\[([^\]]+)\]$/;
+const STD_COLOR_RE = /^(\w+)-(\w+)-(\d+)(?:\/(\d+))?$/;
+const SPEC_COLOR_RE = /^(\w+)-(\w+)(?:\/(\d+))?$/;
+
+/**
+ * Match an arbitrary color value against a theme palette.
+ */
+function matchArbitraryToTheme(entry, arbitrary, palette, threshold) {
+  const arbHex = normalizeToHex(arbitrary);
+  if (!arbHex) {
+    return;
+  }
+
+  const nearest = findNearestColor(arbitrary, palette);
+  if (!nearest) {
+    return;
+  }
+
+  entry.arbitraryMatch = nearest;
+  if (nearest.distance === 0) {
+    entry.arbitraryStatus = "exact";
+    entry.suggestion = `Use var(${nearest.name}) or a Tailwind theme color instead of ${arbitrary}`;
+  } else if (nearest.distance <= threshold) {
+    entry.arbitraryStatus = "close";
+    entry.suggestion = `Close to ${nearest.name} (${nearest.hex}, dE=${nearest.distance})`;
+  }
+}
 
 /**
  * Find all Tailwind CSS color utility classes in source files.
@@ -29,10 +62,10 @@ function findTailwind(paths, options) {
   // Load palette for arbitrary value matching
   let palette = null;
   if (options.vars) {
-    const { parseVariablesFile } = require('./compare-vars');
+    const { parseVariablesFile } = require("./compare-vars");
     palette = parseVariablesFile(options.vars);
   }
-  const threshold = parseFloat(options.threshold) || 10;
+  const threshold = Number.parseFloat(options.threshold) || 10;
 
   // Post-process: validate and extract Tailwind color classes
   const results = [];
@@ -42,11 +75,19 @@ function findTailwind(paths, options) {
 
     // Skip if in a comment
     const trimmedText = result.text.trimStart();
-    if (trimmedText.startsWith('//') || trimmedText.startsWith('*') || trimmedText.startsWith('/*')) continue;
+    if (
+      trimmedText.startsWith("//") ||
+      trimmedText.startsWith("*") ||
+      trimmedText.startsWith("/*")
+    ) {
+      continue;
+    }
 
     // Classify the Tailwind color class
     const info = parseTailwindColorClass(match);
-    if (!info) continue;
+    if (!info) {
+      continue;
+    }
 
     const entry = {
       file: result.file,
@@ -63,20 +104,7 @@ function findTailwind(paths, options) {
 
     // Check arbitrary values against palette
     if (info.arbitrary && palette) {
-      const arbHex = normalizeToHex(info.arbitrary);
-      if (arbHex) {
-        const nearest = findNearestColor(info.arbitrary, palette);
-        if (nearest) {
-          entry.arbitraryMatch = nearest;
-          if (nearest.distance === 0) {
-            entry.arbitraryStatus = 'exact';
-            entry.suggestion = `Use var(${nearest.name}) or a Tailwind theme color instead of ${info.arbitrary}`;
-          } else if (nearest.distance <= threshold) {
-            entry.arbitraryStatus = 'close';
-            entry.suggestion = `Close to ${nearest.name} (${nearest.hex}, dE=${nearest.distance})`;
-          }
-        }
-      }
+      matchArbitraryToTheme(entry, info.arbitrary, palette, threshold);
     }
 
     results.push(entry);
@@ -90,19 +118,74 @@ function findTailwind(paths, options) {
 
   // Deduplicate
   const seen = new Set();
-  const deduped = results.filter(r => {
+  const deduped = results.filter((r) => {
     const key = `${r.file}:${r.line}:${r.column}:${r.value}`;
-    if (seen.has(key)) return false;
+    if (seen.has(key)) {
+      return false;
+    }
     seen.add(key);
     return true;
   });
 
-  deduped.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line || a.column - b.column);
+  deduped.sort(
+    (a, b) =>
+      a.file.localeCompare(b.file) || a.line - b.line || a.column - b.column
+  );
 
-  if (options.format === 'json') {
+  if (options.format === "json") {
     outputJson(deduped, twVersion, v4Info);
   } else {
     outputText(deduped, twVersion, v4Info);
+  }
+}
+
+const V4_CSS_ENTRIES = [
+  "tailwind.css",
+  "globals.css",
+  "app.css",
+  "global.css",
+  "index.css",
+];
+const UTILITY_MATCH_RE = /@utility\s+[\w-]+/g;
+
+/**
+ * Collect CSS files from a search path.
+ */
+function collectCssFiles(searchPath) {
+  const files = [];
+  try {
+    const resolved = path.resolve(searchPath);
+    const stat = fs.statSync(resolved);
+
+    if (stat.isFile() && CSS_FILE_RE.test(resolved)) {
+      files.push(resolved);
+    } else if (stat.isDirectory()) {
+      for (const entry of V4_CSS_ENTRIES) {
+        const fp = path.join(resolved, entry);
+        if (fs.existsSync(fp)) {
+          files.push(fp);
+        }
+      }
+    }
+  } catch {
+    /* skip */
+  }
+  return files;
+}
+
+/**
+ * Analyze a single CSS file for v4 theme/utility usage.
+ */
+function analyzeV4File(fp, info) {
+  const content = fs.readFileSync(fp, "utf-8");
+  if (TAILWIND_V4_PATTERNS.theme.test(content)) {
+    const themeColors = parseTailwindV4Theme(content);
+    info.themeVars += Object.keys(themeColors).length;
+    info.files.push(fp);
+  }
+  const utilMatches = content.match(UTILITY_MATCH_RE);
+  if (utilMatches) {
+    info.utilities += utilMatches.length;
   }
 }
 
@@ -113,34 +196,13 @@ function detectV4Usage(searchPaths) {
   const info = { themeVars: 0, utilities: 0, files: [] };
 
   for (const searchPath of searchPaths) {
-    try {
-      const resolved = path.resolve(searchPath);
-      const stat = fs.statSync(resolved);
-      const files = [];
-
-      if (stat.isFile() && /\.css$/.test(resolved)) {
-        files.push(resolved);
-      } else if (stat.isDirectory()) {
-        // Quick scan of CSS files
-        for (const entry of ['tailwind.css', 'globals.css', 'app.css', 'global.css', 'index.css']) {
-          const fp = path.join(resolved, entry);
-          if (fs.existsSync(fp)) files.push(fp);
-        }
+    for (const fp of collectCssFiles(searchPath)) {
+      try {
+        analyzeV4File(fp, info);
+      } catch {
+        /* skip */
       }
-
-      for (const fp of files) {
-        const content = fs.readFileSync(fp, 'utf-8');
-        if (TAILWIND_V4_PATTERNS.theme.test(content)) {
-          const themeColors = parseTailwindV4Theme(content);
-          info.themeVars += Object.keys(themeColors).length;
-          info.files.push(fp);
-        }
-        const utilMatches = content.match(/@utility\s+[\w-]+/g);
-        if (utilMatches) {
-          info.utilities += utilMatches.length;
-        }
-      }
-    } catch { /* skip */ }
+    }
   }
 
   return info;
@@ -151,7 +213,7 @@ function detectV4Usage(searchPaths) {
  */
 function parseTailwindColorClass(cls) {
   // Arbitrary value: bg-[#ff0000]
-  const arbMatch = cls.match(/^(\w+)-\[([^\]]+)\]$/);
+  const arbMatch = cls.match(ARB_VALUE_RE);
   if (arbMatch) {
     return {
       prefix: arbMatch[1],
@@ -163,7 +225,7 @@ function parseTailwindColorClass(cls) {
   }
 
   // Standard color with shade: bg-red-500, bg-red-500/50
-  const stdMatch = cls.match(/^(\w+)-(\w+)-(\d+)(?:\/(\d+))?$/);
+  const stdMatch = cls.match(STD_COLOR_RE);
   if (stdMatch) {
     return {
       prefix: stdMatch[1],
@@ -175,7 +237,7 @@ function parseTailwindColorClass(cls) {
   }
 
   // Special color (no shade): bg-black, text-white/50
-  const specMatch = cls.match(/^(\w+)-(\w+)(?:\/(\d+))?$/);
+  const specMatch = cls.match(SPEC_COLOR_RE);
   if (specMatch && SPECIAL_COLORS.includes(specMatch[2])) {
     return {
       prefix: specMatch[1],
@@ -191,16 +253,16 @@ function parseTailwindColorClass(cls) {
 
 function outputJson(results, twVersion, v4Info) {
   const grouped = groupByFile(results);
-  const arbitrary = results.filter(r => r.arbitrary);
-  const arbitraryWithMatch = arbitrary.filter(r => r.arbitraryMatch);
+  const arbitrary = results.filter((r) => r.arbitrary);
+  const arbitraryWithMatch = arbitrary.filter((r) => r.arbitraryMatch);
 
   const output = {
-    command: 'tailwind',
+    command: "tailwind",
     tailwindVersion: twVersion,
     summary: {
       totalClasses: results.length,
       totalFiles: Object.keys(grouped).length,
-      byPrefix: countByKey(results, 'prefix'),
+      byPrefix: countByKey(results, "prefix"),
       byColor: countByColor(results),
       arbitraryValues: arbitrary.length,
       arbitraryWithThemeMatch: arbitraryWithMatch.length,
@@ -215,60 +277,83 @@ function outputJson(results, twVersion, v4Info) {
   console.log(JSON.stringify(output, null, 2));
 }
 
+function printArbitraryMatches(arbitraryWithMatch) {
+  if (arbitraryWithMatch.length === 0) {
+    return;
+  }
+  console.log(
+    `--- ARBITRARY VALUES MATCHING THEME (${arbitraryWithMatch.length}) ---`
+  );
+  for (const r of arbitraryWithMatch) {
+    const status =
+      r.arbitraryStatus === "exact"
+        ? "EXACT"
+        : `CLOSE (dE=${r.arbitraryMatch.distance})`;
+    console.log(
+      `  ${r.file}:${r.line}:${r.column}  ${r.value} -> ${status}: ${r.arbitraryMatch.name} (${r.arbitraryMatch.hex})`
+    );
+    if (r.suggestion) {
+      console.log(`    ${r.suggestion}`);
+    }
+  }
+  console.log("");
+}
+
+function printV4Info(v4Info) {
+  if (v4Info && (v4Info.themeVars > 0 || v4Info.utilities > 0)) {
+    console.log("--- Tailwind v4 ---");
+    console.log(`  @theme variables: ${v4Info.themeVars}`);
+    console.log(`  @utility definitions: ${v4Info.utilities}`);
+    console.log("");
+  }
+}
+
 function outputText(results, twVersion, v4Info) {
   if (results.length === 0) {
-    console.log('No Tailwind color classes found.');
+    console.log("No Tailwind color classes found.");
     return;
   }
 
   const grouped = groupByFile(results);
   const fileCount = Object.keys(grouped).length;
-  const arbitrary = results.filter(r => r.arbitrary);
-  const arbitraryWithMatch = arbitrary.filter(r => r.arbitraryMatch);
+  const arbitrary = results.filter((r) => r.arbitrary);
+  const arbitraryWithMatch = arbitrary.filter((r) => r.arbitraryMatch);
 
-  console.log(`\n=== Tailwind Color Classes ===`);
-  console.log(`Found ${results.length} Tailwind color classes in ${fileCount} files`);
+  console.log("\n=== Tailwind Color Classes ===");
+  console.log(
+    `Found ${results.length} Tailwind color classes in ${fileCount} files`
+  );
   if (twVersion === 4) {
-    console.log(`Tailwind v4 detected`);
+    console.log("Tailwind v4 detected");
   }
   if (arbitrary.length > 0) {
-    console.log(`Arbitrary values: ${arbitrary.length}${arbitraryWithMatch.length > 0 ? ` (${arbitraryWithMatch.length} match theme vars)` : ''}`);
+    console.log(
+      `Arbitrary values: ${arbitrary.length}${arbitraryWithMatch.length > 0 ? ` (${arbitraryWithMatch.length} match theme vars)` : ""}`
+    );
   }
-  console.log('');
+  console.log("");
 
-  // Show arbitrary values with theme matches first (high priority)
-  if (arbitraryWithMatch.length > 0) {
-    console.log(`--- ARBITRARY VALUES MATCHING THEME (${arbitraryWithMatch.length}) ---`);
-    for (const r of arbitraryWithMatch) {
-      const status = r.arbitraryStatus === 'exact' ? 'EXACT' : `CLOSE (dE=${r.arbitraryMatch.distance})`;
-      console.log(`  ${r.file}:${r.line}:${r.column}  ${r.value} -> ${status}: ${r.arbitraryMatch.name} (${r.arbitraryMatch.hex})`);
-      if (r.suggestion) console.log(`    ${r.suggestion}`);
-    }
-    console.log('');
-  }
-
-  // Show v4 info
-  if (v4Info && (v4Info.themeVars > 0 || v4Info.utilities > 0)) {
-    console.log(`--- Tailwind v4 ---`);
-    console.log(`  @theme variables: ${v4Info.themeVars}`);
-    console.log(`  @utility definitions: ${v4Info.utilities}`);
-    console.log('');
-  }
+  printArbitraryMatches(arbitraryWithMatch);
+  printV4Info(v4Info);
 
   for (const [file, fileResults] of Object.entries(grouped)) {
     console.log(`FILE: ${file}`);
     for (const r of fileResults) {
-      const detail = r.arbitrary ? `arbitrary: ${r.arbitrary}` : `${r.color}-${r.shade || 'default'}`;
-      console.log(`  L${r.line}:${r.column}  ${r.value}  (${r.prefix}, ${detail})`);
+      const detail = r.arbitrary
+        ? `arbitrary: ${r.arbitrary}`
+        : `${r.color}-${r.shade || "default"}`;
+      console.log(
+        `  L${r.line}:${r.column}  ${r.value}  (${r.prefix}, ${detail})`
+      );
       console.log(`    ${r.context}`);
     }
-    console.log('');
+    console.log("");
   }
 }
 
 // countByKey with 'arbitrary' fallback for Tailwind color grouping
 function countByColor(results) {
-  return countByKey(results, 'color', 'arbitrary');
+  return countByKey(results, "color", "arbitrary");
 }
 
 module.exports = { findTailwind };

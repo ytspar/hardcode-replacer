@@ -24,7 +24,9 @@
     "site": "npm --prefix site run dev",
     "site:build": "npm --prefix site run build",
     "site:preview": "npm --prefix site run preview",
-    "test": "jest"
+    "test": "jest",
+    "check": "ultracite check",
+    "fix": "ultracite fix"
   },
   "keywords": [
     "css",
@@ -39,7 +41,9 @@
     "commander": "^13.1.0"
   },
   "devDependencies": {
-    "jest": "^29.7.0"
+    "@biomejs/biome": "^2.4.0",
+    "jest": "^29.7.0",
+    "ultracite": "^7.2.4"
   },
   "engines": {
     "node": ">=18.0.0"

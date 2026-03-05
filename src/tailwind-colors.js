@@ -1,43 +1,87 @@
-'use strict';
+const fs = require("node:fs");
+const path = require("node:path");
 
-const fs = require('fs');
-const path = require('path');
+const CSS_EXT_RE = /\.css$/;
+const THEME_VAR_RE = /--([\w-]+)\s*:\s*([^;]+)/;
+const THEME_BLOCK_INNER_RE = /@theme\s*\{([^}]+)\}/;
 
 // Tailwind CSS color utility prefixes
 const COLOR_PREFIXES = [
-  'bg', 'text', 'border', 'ring', 'shadow', 'divide', 'outline',
-  'accent', 'fill', 'stroke', 'decoration', 'placeholder',
-  'from', 'via', 'to', 'caret',
+  "bg",
+  "text",
+  "border",
+  "ring",
+  "shadow",
+  "divide",
+  "outline",
+  "accent",
+  "fill",
+  "stroke",
+  "decoration",
+  "placeholder",
+  "from",
+  "via",
+  "to",
+  "caret",
 ];
 
 // Tailwind color names (v3+)
 const COLOR_NAMES = [
-  'slate', 'gray', 'zinc', 'neutral', 'stone',
-  'red', 'orange', 'amber', 'yellow', 'lime',
-  'green', 'emerald', 'teal', 'cyan', 'sky',
-  'blue', 'indigo', 'violet', 'purple', 'fuchsia',
-  'pink', 'rose',
+  "slate",
+  "gray",
+  "zinc",
+  "neutral",
+  "stone",
+  "red",
+  "orange",
+  "amber",
+  "yellow",
+  "lime",
+  "green",
+  "emerald",
+  "teal",
+  "cyan",
+  "sky",
+  "blue",
+  "indigo",
+  "violet",
+  "purple",
+  "fuchsia",
+  "pink",
+  "rose",
 ];
 
 // Special color values (no shade suffix)
-const SPECIAL_COLORS = [
-  'black', 'white', 'transparent', 'current', 'inherit',
-];
+const SPECIAL_COLORS = ["black", "white", "transparent", "current", "inherit"];
 
 // Valid shade suffixes
-const SHADES = ['50', '100', '200', '300', '400', '500', '600', '700', '800', '900', '950'];
+const SHADES = [
+  "50",
+  "100",
+  "200",
+  "300",
+  "400",
+  "500",
+  "600",
+  "700",
+  "800",
+  "900",
+  "950",
+];
 
 // Build the ripgrep pattern for Tailwind color classes
 function buildTailwindColorPattern() {
-  const prefixes = COLOR_PREFIXES.join('|');
-  const colors = COLOR_NAMES.join('|');
-  const specials = SPECIAL_COLORS.join('|');
-  const shades = SHADES.join('|');
+  const prefixes = COLOR_PREFIXES.join("|");
+  const colors = COLOR_NAMES.join("|");
+  const specials = SPECIAL_COLORS.join("|");
+  const shades = SHADES.join("|");
 
   // Match: prefix-color-shade, prefix-color-shade/opacity, prefix-special, prefix-[arbitrary]
-  return `\\b(${prefixes})-(${colors})-(${shades})(/\\d+)?\\b`
-    + `|\\b(${prefixes})-(${specials})(/\\d+)?\\b`
-    + `|\\b(${prefixes})-\\[[^\\]]*\\]`;
+  return (
+    `\\b(${prefixes})-(${colors})-(${shades})(/\\d+)?\\b` +
+    `|\\b(${prefixes})-(${specials})(/\\d+)?\\b` +
+    `|\\b(${prefixes})-\\[[^\\]]*\\]`
+  );
 }
 
 /**
@@ -54,36 +98,62 @@ const TAILWIND_V4_PATTERNS = {
   colorVar: /--color-([\w-]+)\s*:/,
 };
 
+const CSS_ENTRY_POINTS = [
+  "tailwind.css",
+  "globals.css",
+  "app.css",
+  "global.css",
+  "index.css",
+];
+
+/**
+ * Check if a file contains Tailwind v4 theme patterns.
+ */
+function fileHasV4Theme(filePath) {
+  try {
+    const content = fs.readFileSync(filePath, "utf-8");
+    return TAILWIND_V4_PATTERNS.theme.test(content);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Check a single path for Tailwind v4 patterns.
+ */
+function checkPathForV4(searchPath) {
+  try {
+    const resolved = path.resolve(searchPath);
+    const stat = fs.statSync(resolved);
+
+    if (stat.isFile() && CSS_EXT_RE.test(resolved)) {
+      return fileHasV4Theme(resolved);
+    }
+
+    if (stat.isDirectory()) {
+      for (const entry of CSS_ENTRY_POINTS) {
+        const fp = path.join(resolved, entry);
+        if (fs.existsSync(fp) && fileHasV4Theme(fp)) {
+          return true;
+        }
+      }
+    }
+  } catch {
+    /* skip */
+  }
+  return false;
+}
+
 /**
  * Detect Tailwind version from project files.
  * Returns 4 if v4 patterns are found, 3 otherwise.
  */
 function detectTailwindVersion(searchPaths) {
-
-  // Check for v4 patterns in CSS files
   for (const searchPath of searchPaths) {
-    try {
-      const resolved = path.resolve(searchPath);
-      const stat = fs.statSync(resolved);
-
-      if (stat.isFile() && /\.css$/.test(resolved)) {
-        const content = fs.readFileSync(resolved, 'utf-8');
-        if (TAILWIND_V4_PATTERNS.theme.test(content)) return 4;
-      }
-
-      if (stat.isDirectory()) {
-        // Check common CSS entry points
-        for (const entry of ['tailwind.css', 'globals.css', 'app.css', 'global.css', 'index.css']) {
-          const fp = path.join(resolved, entry);
-          if (fs.existsSync(fp)) {
-            const content = fs.readFileSync(fp, 'utf-8');
-            if (TAILWIND_V4_PATTERNS.theme.test(content)) return 4;
-          }
-        }
-      }
-    } catch { /* skip */ }
+    if (checkPathForV4(searchPath)) {
+      return 4;
+    }
   }
-
   return 3;
 }
 
@@ -95,15 +165,19 @@ function parseTailwindV4Theme(cssContent) {
   const colors = {};
   // Find @theme blocks
   const themeMatch = cssContent.match(/@theme\s*\{([^}]+)\}/g);
-  if (!themeMatch) return colors;
+  if (!themeMatch) {
+    return colors;
+  }
 
   for (const block of themeMatch) {
-    const inner = block.match(/@theme\s*\{([^}]+)\}/);
-    if (!inner) continue;
+    const inner = block.match(THEME_BLOCK_INNER_RE);
+    if (!inner) {
+      continue;
+    }
 
-    const lines = inner[1].split('\n');
+    const lines = inner[1].split("\n");
     for (const line of lines) {
-      const varMatch = line.match(/--([\w-]+)\s*:\s*([^;]+)/);
+      const varMatch = line.match(THEME_VAR_RE);
       if (varMatch) {
         colors[`--${varMatch[1]}`] = varMatch[2].trim();
       }
