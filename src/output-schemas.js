@@ -140,6 +140,42 @@ type SubsetRelation = {
   sharedClasses: string[];
   extraClasses: string[];
 };`,
+  jsx: `type JsxOutput = {
+  command: 'jsx';
+  summary: {
+    totalFiles: number;
+    totalClusters: number;
+    exactDuplicates: number;
+    structuralDuplicates: number;
+    similarPatterns: number;
+    minCount: number;
+    minDepth: number;
+    similarityThreshold: number;
+  };
+  clusters: JsxCluster[];
+};
+
+type JsxCluster = {
+  type: 'exact' | 'structural' | 'similar';
+  fingerprint: string;
+  structure: string;
+  occurrences: number;
+  files: number;
+  depth: number;
+  nodeCount: number;
+  impactScore: number;
+  sharedClasses: string[];
+  classVariants: number;
+  suggestion: string;
+  locations: JsxLocation[];
+};
+
+type JsxLocation = {
+  file: string;
+  line: number;
+  tag: string;
+  classes: string[];
+};`,
 };
 
 function getSchema(commandName) {

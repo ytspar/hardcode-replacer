@@ -3,6 +3,7 @@ const { findColors } = require("./commands/find-colors");
 const { findTailwind } = require("./commands/find-tailwind");
 const { compareVars } = require("./commands/compare-vars");
 const { findPatterns } = require("./commands/find-patterns");
+const { findJsx } = require("./commands/find-jsx");
 const { loadConfig, mergeOptions } = require("./config");
 const { getSchema } = require("./output-schemas");
 
@@ -25,7 +26,8 @@ program
       "  colors    Find all hardcoded color values (hex, rgb, hsl, oklch, named)\n" +
       "  compare   Compare found colors against a variables file, get replacements\n" +
       "  tailwind  Find Tailwind color utility classes and arbitrary values\n" +
-      "  patterns  Find repeated className/cn()/clsx() patterns for extraction\n\n" +
+      "  patterns  Find repeated className/cn()/clsx() patterns for extraction\n" +
+      "  jsx       Find repeated JSX structures (tag trees) for component extraction\n\n" +
       "Quick start:\n" +
       "  $ hardcode-replacer colors src/\n" +
       "  $ hardcode-replacer compare src/ --vars styles/variables.css\n" +
@@ -237,9 +239,40 @@ program
     findPatterns(paths, mergeOptions(opts, config));
   });
 
+// === jsx command ===
+program
+  .command("jsx")
+  .description(
+    "Find repeated JSX structural patterns (tag trees + classNames) for component extraction"
+  )
+  .argument("[paths...]", "Paths to search (files or directories)", ["."])
+  .option("--min-count <number>", "Minimum occurrences to report", "2")
+  .option(
+    "--min-depth <number>",
+    "Minimum subtree depth (1 = parent+child, 2 = grandchild)",
+    "1"
+  )
+  .option(
+    "--similarity <number>",
+    "Jaccard similarity threshold for 'similar' clusters (0-1)",
+    "0.7"
+  )
+  .option("--include <glob>", "File glob pattern to include")
+  .option(
+    "--exclude <glob...>",
+    "File glob patterns to exclude (repeatable)",
+    collect,
+    []
+  )
+  .option("--format <format>", "Output format: text or json", "text")
+  .action((paths, opts) => {
+    const config = loadConfig(paths[0] || ".");
+    findJsx(paths, mergeOptions(opts, config));
+  });
+
 // Handle --output-schema before parse to bypass required-option validation
 if (process.argv.includes("--output-schema")) {
-  const commands = ["colors", "tailwind", "compare", "patterns"];
+  const commands = ["colors", "tailwind", "compare", "patterns", "jsx"];
   const cmdName = process.argv.find((arg) => commands.includes(arg));
   if (cmdName) {
     const schema = getSchema(cmdName);
