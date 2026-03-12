@@ -593,13 +593,28 @@ function jaccardSimilarity(setA, setB) {
  * zero or very few shared classes is just common HTML nesting — not a
  * component extraction candidate.
  */
-const GENERIC_TAGS = new Set([
-  "div", "span", "p", "a", "section", "article", "aside", "main",
-  "header", "footer", "nav", "ul", "ol", "li", "h1", "h2", "h3",
-  "h4", "h5", "h6", "table", "tr", "td", "th", "thead", "tbody",
-  "form", "input", "label", "select", "textarea", "button", "img",
-  "figure", "figcaption", "blockquote", "pre", "code", "hr", "br",
-  "strong", "em", "small", "sup", "sub", "dl", "dt", "dd",
+// All 148 standard HTML element tags from the HTML Living Standard.
+// Source: https://github.com/wooorm/html-tag-names (WHATWG spec)
+// Any tag NOT in this set is a custom/React component (e.g., Badge, Card).
+const HTML_TAGS = new Set([
+  "a", "abbr", "acronym", "address", "applet", "area", "article", "aside",
+  "audio", "b", "base", "basefont", "bdi", "bdo", "bgsound", "big", "blink",
+  "blockquote", "body", "br", "button", "canvas", "caption", "center", "cite",
+  "code", "col", "colgroup", "command", "content", "data", "datalist", "dd",
+  "del", "details", "dfn", "dialog", "dir", "div", "dl", "dt", "element",
+  "em", "embed", "fieldset", "figcaption", "figure", "font", "footer", "form",
+  "frame", "frameset", "h1", "h2", "h3", "h4", "h5", "h6", "head", "header",
+  "hgroup", "hr", "html", "i", "iframe", "image", "img", "input", "ins",
+  "isindex", "kbd", "keygen", "label", "legend", "li", "link", "listing",
+  "main", "map", "mark", "marquee", "math", "menu", "menuitem", "meta",
+  "meter", "multicol", "nav", "nextid", "nobr", "noembed", "noframes",
+  "noscript", "object", "ol", "optgroup", "option", "output", "p", "param",
+  "picture", "plaintext", "pre", "progress", "q", "rb", "rbc", "rp", "rt",
+  "rtc", "ruby", "s", "samp", "script", "search", "section", "select",
+  "shadow", "slot", "small", "source", "spacer", "span", "strike", "strong",
+  "style", "sub", "summary", "sup", "svg", "table", "tbody", "td", "template",
+  "textarea", "tfoot", "th", "thead", "time", "title", "tr", "track", "tt",
+  "u", "ul", "var", "video", "wbr", "xmp",
 ]);
 
 function isActionableCluster(cluster) {
@@ -610,7 +625,7 @@ function isActionableCluster(cluster) {
 
   // Check if fingerprint uses only generic HTML tags
   const tags = cluster.fingerprint.replace(/[(),]/g, " ").trim().split(/\s+/);
-  const allGeneric = tags.every((t) => GENERIC_TAGS.has(t));
+  const allGeneric = tags.every((t) => HTML_TAGS.has(t));
 
   if (allGeneric) {
     // Generic HTML-only structures need meaningful shared classes to be actionable
