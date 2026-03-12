@@ -73,6 +73,7 @@ TYPICAL WORKFLOW
   5. Diff:      hardcode-replacer compare src/ --vars styles/theme.css --diff .hcr-baseline.json
   6. Tailwind:  hardcode-replacer tailwind src/ --vars styles/theme.css
   7. Patterns:  hardcode-replacer patterns src/ --min-count 3
+  8. JSX:       hardcode-replacer jsx src/ --min-depth 2
 
 CONTEXT CLASSIFICATION
   Every found color is classified into one of these categories:
@@ -131,6 +132,7 @@ FOR AI ASSISTANTS
 
   Examples:
     hardcode-replacer compare src/ --vars theme.css --json
+    hardcode-replacer jsx src/ --min-depth 2 --format json
     hardcode-replacer colors --output-schema
 `);
   });

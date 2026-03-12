@@ -207,6 +207,13 @@ export const featureCards = [
     desc: "Detect repeated className patterns suitable for extraction into CVA variants or @apply directives.",
     cli: "hardcode-replacer patterns src/ --min-count 3",
   },
+  {
+    command: "jsx",
+    color: "#f97316",
+    title: "JSX Structures",
+    desc: "Find repeated JSX subtrees (tag hierarchies + classNames) for component extraction. Detects exact, structural, and similar duplicates.",
+    cli: "hardcode-replacer jsx src/ --min-depth 2",
+  },
 ];
 
 export const workflowSteps = [

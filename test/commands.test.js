@@ -4,9 +4,11 @@ const path = require('node:path');
 const { findColors } = require('../src/commands/find-colors');
 const { findTailwind } = require('../src/commands/find-tailwind');
 const { findPatterns } = require('../src/commands/find-patterns');
+const { findJsx } = require('../src/commands/find-jsx');
 
 const FIXTURES = path.join(__dirname, 'fixtures');
 const SAMPLE = path.join(FIXTURES, 'sample.tsx');
+const JSX_FIXTURE = path.join(FIXTURES, 'jsx-structures.tsx');
 
 // Helper to capture console.log output
 function captureOutput(fn) {
@@ -152,6 +154,152 @@ describe('findPatterns command', () => {
       expect(p).toHaveProperty('classCount');
       expect(p).toHaveProperty('occurrences');
       expect(p).toHaveProperty('locations');
+    }
+  });
+});
+
+describe('findJsx command', () => {
+  test('finds repeated JSX structures in text mode', () => {
+    const output = captureOutput(() => {
+      findJsx([JSX_FIXTURE], {
+        format: 'text',
+        exclude: [],
+        minCount: '2',
+        minDepth: '1',
+        similarity: '0.7',
+      });
+    });
+    expect(output).toContain('Repeated JSX Structures');
+    expect(output).toContain('EXACT');
+    expect(output).toContain('button(span)');
+    expect(output).toContain('jsx-structures.tsx');
+  });
+
+  test('produces valid JSON in json mode', () => {
+    const output = captureOutput(() => {
+      findJsx([JSX_FIXTURE], {
+        format: 'json',
+        exclude: [],
+        minCount: '2',
+        minDepth: '1',
+        similarity: '0.7',
+      });
+    });
+    const parsed = JSON.parse(output);
+    expect(parsed.command).toBe('jsx');
+    expect(parsed.summary).toBeTruthy();
+    expect(parsed.summary.totalClusters).toBeGreaterThan(0);
+    expect(parsed.clusters).toBeTruthy();
+    expect(Array.isArray(parsed.clusters)).toBe(true);
+  });
+
+  test('json output has correct structure', () => {
+    const output = captureOutput(() => {
+      findJsx([JSX_FIXTURE], {
+        format: 'json',
+        exclude: [],
+        minCount: '2',
+        minDepth: '1',
+        similarity: '0.7',
+      });
+    });
+    const parsed = JSON.parse(output);
+    expect(parsed.summary).toHaveProperty('totalFiles');
+    expect(parsed.summary).toHaveProperty('totalClusters');
+    expect(parsed.summary).toHaveProperty('exactDuplicates');
+    expect(parsed.summary).toHaveProperty('structuralDuplicates');
+    expect(parsed.summary).toHaveProperty('similarPatterns');
+    expect(parsed.summary).toHaveProperty('minCount');
+    expect(parsed.summary).toHaveProperty('minDepth');
+    expect(parsed.summary).toHaveProperty('similarityThreshold');
+
+    if (parsed.clusters.length > 0) {
+      const c = parsed.clusters[0];
+      expect(c).toHaveProperty('type');
+      expect(c).toHaveProperty('fingerprint');
+      expect(c).toHaveProperty('structure');
+      expect(c).toHaveProperty('occurrences');
+      expect(c).toHaveProperty('files');
+      expect(c).toHaveProperty('depth');
+      expect(c).toHaveProperty('nodeCount');
+      expect(c).toHaveProperty('impactScore');
+      expect(c).toHaveProperty('sharedClasses');
+      expect(c).toHaveProperty('classVariants');
+      expect(c).toHaveProperty('suggestion');
+      expect(c).toHaveProperty('locations');
+      expect(['exact', 'structural', 'similar']).toContain(c.type);
+    }
+  });
+
+  test('detects exact button+span duplicates', () => {
+    const output = captureOutput(() => {
+      findJsx([JSX_FIXTURE], {
+        format: 'json',
+        exclude: [],
+        minCount: '2',
+        minDepth: '1',
+        similarity: '0.7',
+      });
+    });
+    const parsed = JSON.parse(output);
+    const buttonSpan = parsed.clusters.find(
+      (c) => c.fingerprint === 'button(span)' && c.type === 'exact'
+    );
+    expect(buttonSpan).toBeTruthy();
+    expect(buttonSpan.occurrences).toBe(3);
+  });
+
+  test('detects structural section duplicates', () => {
+    const output = captureOutput(() => {
+      findJsx([JSX_FIXTURE], {
+        format: 'json',
+        exclude: [],
+        minCount: '2',
+        minDepth: '1',
+        similarity: '0.7',
+      });
+    });
+    const parsed = JSON.parse(output);
+    const section = parsed.clusters.find(
+      (c) => c.fingerprint === 'section(div(h2))' && c.type === 'structural'
+    );
+    expect(section).toBeTruthy();
+    expect(section.occurrences).toBe(2);
+    expect(section.classVariants).toBeGreaterThan(1);
+  });
+
+  test('detects input wrapper duplicates', () => {
+    const output = captureOutput(() => {
+      findJsx([JSX_FIXTURE], {
+        format: 'json',
+        exclude: [],
+        minCount: '2',
+        minDepth: '1',
+        similarity: '0.7',
+      });
+    });
+    const parsed = JSON.parse(output);
+    const input = parsed.clusters.find(
+      (c) => c.fingerprint === 'div(div,div(input))' && c.type === 'exact'
+    );
+    expect(input).toBeTruthy();
+    expect(input.occurrences).toBe(2);
+  });
+
+  test('does not report leaf-only components', () => {
+    const output = captureOutput(() => {
+      findJsx([JSX_FIXTURE], {
+        format: 'json',
+        exclude: [],
+        minCount: '2',
+        minDepth: '1',
+        similarity: '0.7',
+      });
+    });
+    const parsed = JSON.parse(output);
+    // No cluster should have a single-node leaf fingerprint with no children
+    for (const c of parsed.clusters) {
+      expect(c.nodeCount).toBeGreaterThan(1);
     }
   });
 });

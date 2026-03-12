@@ -105,6 +105,9 @@ function findJsxFiles(searchPaths, options) {
 const OPEN_TAG_RE =
   /^(\s*)<([A-Za-z][A-Za-z0-9.]*)([^>]*?)(\/?)>\s*$/;
 const CLOSE_TAG_RE = /^\s*<\/([A-Za-z][A-Za-z0-9.]*)>\s*$/;
+// Inline element: <tag ...>content</tag> on one line
+const INLINE_ELEMENT_RE =
+  /^(\s*)<([A-Za-z][A-Za-z0-9.]*)([^>]*)>([^<]*)<\/\2>\s*$/;
 const CLASSNAME_STATIC_RE = /className="([^"]*)"/;
 const CLASSNAME_TEMPLATE_RE = /className=\{`([^`]*)`\}/;
 const CLASSNAME_EXPR_RE = /className=\{([^}]+)\}/;
@@ -135,6 +138,39 @@ function parseJsxElements(content, file) {
           break;
         }
       }
+      continue;
+    }
+
+    // Check for inline elements: <tag ...>content</tag> on one line
+    const inlineMatch = line.match(INLINE_ELEMENT_RE);
+    if (inlineMatch) {
+      const indent = inlineMatch[1].length;
+      const tag = inlineMatch[2];
+      const attrs = inlineMatch[3];
+      const classes = extractClasses(attrs, lines, i);
+
+      const element = {
+        file,
+        line: lineNum,
+        tag,
+        classes,
+        indent,
+        selfClosing: false,
+        closeLine: lineNum,
+        children: [],
+        parentIndex: null,
+      };
+
+      // Find parent
+      for (let j = stack.length - 1; j >= 0; j--) {
+        if (stack[j].indent < indent) {
+          element.parentIndex = stack[j].elementIndex;
+          break;
+        }
+      }
+
+      element.elementIndex = elements.length;
+      elements.push(element);
       continue;
     }
 

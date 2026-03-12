@@ -103,6 +103,28 @@ hardcode-replacer patterns src/
 hardcode-replacer patterns src/ --min-count 3 --min-classes 3 --format json
 ```
 
+### 5. Find repeated JSX structures
+```bash
+hardcode-replacer jsx [paths...] [options]
+```
+Finds repeated JSX subtrees (tag hierarchies + classNames) for component extraction. Reports three types:
+- **Exact** — identical structure and classes
+- **Structural** — same tag tree, different classes (extract with variant props)
+- **Similar** — same root tag, 70%+ class overlap (Jaccard similarity)
+
+Each cluster includes a structural fingerprint (e.g., `button(span)`), impact score, shared classes, and a suggestion.
+
+**Options:**
+- `--min-count <n>` — minimum occurrences to report (default: 2)
+- `--min-depth <n>` — minimum subtree depth, 1 = parent+child (default: 1)
+- `--similarity <n>` — Jaccard threshold for "similar" clusters, 0-1 (default: 0.7)
+
+**Examples:**
+```bash
+hardcode-replacer jsx src/
+hardcode-replacer jsx src/ --min-depth 2 --min-count 3 --format json
+```
+
 ## Config File
 
 Create `.hardcode-replacerrc.json` in your project root for default settings:
@@ -153,6 +175,7 @@ This tool is designed for Claude to invoke via bash to efficiently scan codebase
 3. Use `--fix` to auto-replace exact matches, or use the output to manually replace
 4. Run `hardcode-replacer tailwind src/ --vars path/to/theme.css` to find Tailwind color classes and arbitrary values matching the theme
 5. Run `hardcode-replacer patterns src/` to find repeated class patterns for extraction
+6. Run `hardcode-replacer jsx src/` to find repeated JSX structures for component extraction
 
 The `--format json` flag produces structured output suitable for further processing.
 
@@ -166,4 +189,5 @@ The `--format json` flag produces structured output suitable for further process
 - `src/color-utils.js` — color parsing, conversion, CIE76 delta-E distance, alpha extraction, color-mix suggestions, variable name suggestions
 - `src/tailwind-colors.js` — Tailwind color names, prefixes, pattern builders, v4 detection
 - `src/context-classifier.js` — context classification (actionable vs non-actionable), multi-line comment detection
-- `src/commands/` — individual command handlers
+- `src/output-schemas.js` — TypeScript type definitions for `--output-schema`
+- `src/commands/` — individual command handlers (find-colors, find-tailwind, compare-vars, find-patterns, find-jsx)

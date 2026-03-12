@@ -52,6 +52,9 @@ hardcode-replacer tailwind src/
 
 # Find repeated class patterns
 hardcode-replacer patterns src/
+
+# Find repeated JSX structures for component extraction
+hardcode-replacer jsx src/
 ```
 
 ---
@@ -215,6 +218,51 @@ Found 9 repeated patterns across 36 locations
   "font-mono text-xs" (25 co-occurrences)
 ```
 
+### `jsx` — Find repeated JSX structures
+
+Finds repeated JSX subtrees (tag hierarchies + classNames) that can be extracted into reusable components. Unlike `patterns` (which finds repeated className strings), `jsx` detects repeated *structural* patterns — e.g., a `<button><span>...</span></button>` used in 5 places with similar classNames but different text content.
+
+```bash
+hardcode-replacer jsx [paths...] [options]
+```
+
+**Options:**
+
+| Flag | Description |
+|------|-------------|
+| `--min-count <n>` | Minimum occurrences to report (default: 2) |
+| `--min-depth <n>` | Minimum subtree depth (1 = parent+child) (default: 1) |
+| `--similarity <n>` | Jaccard similarity threshold for "similar" clusters, 0-1 (default: 0.7) |
+| `--include <glob>` | File pattern to include |
+| `--exclude <glob>` | File pattern to exclude (repeatable) |
+| `--format json` | Output as structured JSON |
+
+Three cluster types:
+- **Exact** — Identical tag hierarchy AND classNames
+- **Structural** — Same tag hierarchy, different classNames (extract with variant props)
+- **Similar** — Same root tag, 70%+ className overlap (Jaccard similarity)
+
+**Example output:**
+
+```
+=== Repeated JSX Structures ===
+Scanned 69 files. Found 89 clusters.
+
+  Exact duplicates:     72 (identical structure + classes)
+  Structural duplicates: 15 (same tags, different classes)
+  Similar patterns:     2 (same root, 70%+ class overlap)
+
+1. [EXACT] 5x across 3 file(s) — impact: 30
+   Fingerprint: button(span)
+
+   <button .bg-grey-800 .border .border-grey-700 ...>
+     <span .font-retron .text-sm .text-white ...></span>
+   </button>
+
+   Shared classes: bg-grey-800, border, border-grey-700, flex, ...
+   → Extract into a reusable component. 5 identical instances found.
+```
+
 ---
 
 ## Context Classification
@@ -284,6 +332,9 @@ hardcode-replacer tailwind src/ --vars styles/variables.css
 
 # Step 6: Find class patterns to extract into components
 hardcode-replacer patterns src/ --min-count 3 --min-classes 3
+
+# Step 7: Find repeated JSX structures for component extraction
+hardcode-replacer jsx src/ --min-depth 2
 ```
 
 The `--format json` flag produces structured output suitable for programmatic consumption by AI tools. The text format is optimized for humans and for pasting into chat.
@@ -307,6 +358,9 @@ hardcode-replacer compare src/ --vars styles/theme.css --threshold 5
 
 # Find repeated Tailwind patterns for extraction
 hardcode-replacer patterns src/ --min-count 3
+
+# Find JSX structures to extract into components
+hardcode-replacer jsx src/ --min-count 3
 ```
 
 ---
@@ -367,6 +421,7 @@ src/
     find-tailwind.js        `tailwind` command
     compare-vars.js         `compare` command (+ fix, baseline, diff)
     find-patterns.js        `patterns` command
+    find-jsx.js             `jsx` command
 ```
 
 **Search**: Uses [ripgrep](https://github.com/BurntSushi/ripgrep) (`rg --json`) for fast structured search with grep fallback. All external commands use `execFileSync` (no shell) to prevent command injection.
