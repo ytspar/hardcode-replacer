@@ -65,10 +65,10 @@ function findJsx(paths, options) {
     similarity
   );
 
-  // 6. Merge and sort by impact
-  const allClusters = [...exactClusters, ...similarClusters].sort(
-    (a, b) => b.impactScore - a.impactScore
-  );
+  // 6. Merge, filter noise, and sort by impact
+  const allClusters = [...exactClusters, ...similarClusters]
+    .filter((c) => isActionableCluster(c))
+    .sort((a, b) => b.impactScore - a.impactScore);
 
   if (options.format === "json") {
     outputJson(allClusters, files.length, minCount, minDepth, similarity);
@@ -586,6 +586,48 @@ function jaccardSimilarity(setA, setB) {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * Filter out generic/noisy clusters that aren't actionable.
+ * A cluster made entirely of basic HTML tags (div, span, p, etc.) with
+ * zero or very few shared classes is just common HTML nesting — not a
+ * component extraction candidate.
+ */
+const GENERIC_TAGS = new Set([
+  "div", "span", "p", "a", "section", "article", "aside", "main",
+  "header", "footer", "nav", "ul", "ol", "li", "h1", "h2", "h3",
+  "h4", "h5", "h6", "table", "tr", "td", "th", "thead", "tbody",
+  "form", "input", "label", "select", "textarea", "button", "img",
+  "figure", "figcaption", "blockquote", "pre", "code", "hr", "br",
+  "strong", "em", "small", "sup", "sub", "dl", "dt", "dd",
+]);
+
+function isActionableCluster(cluster) {
+  // Exact duplicates with shared classes are always actionable
+  if (cluster.type === "exact" && cluster.sharedClasses.length >= 3) {
+    return true;
+  }
+
+  // Check if fingerprint uses only generic HTML tags
+  const tags = cluster.fingerprint.replace(/[(),]/g, " ").trim().split(/\s+/);
+  const allGeneric = tags.every((t) => GENERIC_TAGS.has(t));
+
+  if (allGeneric) {
+    // Generic HTML-only structures need meaningful shared classes to be actionable
+    if (cluster.type === "structural" && cluster.sharedClasses.length < 3) {
+      return false;
+    }
+    if (cluster.type === "similar" && cluster.sharedClasses.length < 2) {
+      return false;
+    }
+    // Very shallow generic patterns (depth 2, 2 nodes) are too common
+    if (cluster.nodeCount <= 2 && cluster.sharedClasses.length < 5) {
+      return false;
+    }
+  }
+
+  return true;
+}
 
 function findSharedClasses(members) {
   if (members.length === 0) return [];

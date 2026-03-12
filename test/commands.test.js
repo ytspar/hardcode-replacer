@@ -249,7 +249,7 @@ describe('findJsx command', () => {
     expect(buttonSpan.occurrences).toBe(3);
   });
 
-  test('detects structural section duplicates', () => {
+  test('filters out generic structural patterns with few shared classes', () => {
     const output = captureOutput(() => {
       findJsx([JSX_FIXTURE], {
         format: 'json',
@@ -260,12 +260,16 @@ describe('findJsx command', () => {
       });
     });
     const parsed = JSON.parse(output);
+    // section(div(h2)) has only 1 shared class (mx-auto) — should be filtered as noise
     const section = parsed.clusters.find(
       (c) => c.fingerprint === 'section(div(h2))' && c.type === 'structural'
     );
-    expect(section).toBeTruthy();
-    expect(section.occurrences).toBe(2);
-    expect(section.classVariants).toBeGreaterThan(1);
+    expect(section).toBeUndefined();
+    // But exact duplicates with many shared classes should remain
+    const buttonSpan = parsed.clusters.find(
+      (c) => c.fingerprint === 'button(span)' && c.type === 'exact'
+    );
+    expect(buttonSpan).toBeTruthy();
   });
 
   test('detects input wrapper duplicates', () => {
