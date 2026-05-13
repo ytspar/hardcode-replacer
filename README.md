@@ -448,6 +448,35 @@ npx hardcode-replacer colors src/
 
 ---
 
+## Programmatic API (`hardcode-replacer/detect`)
+
+Single-string detection for in-process callers (e.g. PreToolUse hooks blocking `Edit`/`Write` before the file is saved). The CLI scans whole trees with the broader `HEX_PATTERN` from `src/color-patterns.js`; the `/detect` subpath exposes a narrower, configurable check intended for write-time gates.
+
+```js
+const { detectHexViolations, isHexExemptPath } = require("hardcode-replacer/detect");
+
+if (isHexExemptPath(filePath)) return;
+
+const violations = detectHexViolations(sourceContent, { maxMatches: 5 });
+if (violations.length > 0) {
+  // violations: Array<{ line: number, content: string, match: string }>
+  // line is 1-indexed; content has trailing whitespace trimmed
+}
+```
+
+**Defaults (write-time gate semantics):**
+
+- `pattern` — `/#[0-9a-fA-F]{6}/` (6-digit only; `#fff` shorthand passes through). Pass `HEX_PATTERN` from `hardcode-replacer/src/color-patterns` to widen.
+- `filterKeywords` — `["var(--", "@theme", "primitive", "allow-hex"]`. `allow-hex` is an intentional inline-comment escape (`color: #ff0000; // allow-hex: legacy logo`).
+- `skipComments` — skips `//` and `/* ... */` block comments.
+- `maxMatches` — stop scanning after N matches; default unbounded.
+
+`isHexExemptPath` skips token source files (`/design-tokens/`, `/foundation.css`, …), fixture/test/stories paths, generated registries, and `tailwind.config`. Pass `extraFragments` to widen.
+
+**Used by:** `cli/el-hook` (verticalint/tools) write-time PreToolUse gate. The CLI `hardcode-replacer compare` remains the batch-sweep + fuzzy-match-to-vars + auto-fix path.
+
+---
+
 ## Contributing
 
 PRs welcome! If you find false positives or missed patterns, please open an issue with:
