@@ -4,6 +4,11 @@ const { findTailwind } = require("./commands/find-tailwind");
 const { compareVars } = require("./commands/compare-vars");
 const { findPatterns } = require("./commands/find-patterns");
 const { findJsx } = require("./commands/find-jsx");
+const {
+  findDuplicateLiterals,
+  outputJson: outputDuplicateLiteralsJson,
+  outputText: outputDuplicateLiteralsText,
+} = require("./commands/find-duplicate-literals");
 const { loadConfig, mergeOptions } = require("./config");
 const { getSchema } = require("./output-schemas");
 
@@ -27,7 +32,8 @@ program
       "  compare   Compare found colors against a variables file, get replacements\n" +
       "  tailwind  Find Tailwind color utility classes and arbitrary values\n" +
       "  patterns  Find repeated className/cn()/clsx() patterns for extraction\n" +
-      "  jsx       Find repeated JSX structures (tag trees) for component extraction\n\n" +
+      "  jsx       Find repeated JSX structures (tag trees) for component extraction\n" +
+      "  duplicate-literals  Find the same string/regex literal duplicated across files (AST)\n\n" +
       "Quick start:\n" +
       "  $ hardcode-replacer colors src/\n" +
       "  $ hardcode-replacer compare src/ --vars styles/variables.css\n" +
@@ -74,6 +80,7 @@ TYPICAL WORKFLOW
   6. Tailwind:  hardcode-replacer tailwind src/ --vars styles/theme.css
   7. Patterns:  hardcode-replacer patterns src/ --min-count 3
   8. JSX:       hardcode-replacer jsx src/ --min-depth 2
+  9. Dupes:     hardcode-replacer duplicate-literals src/ --check
 
 CONTEXT CLASSIFICATION
   Every found color is classified into one of these categories:
@@ -272,9 +279,70 @@ program
     findJsx(paths, mergeOptions(opts, config));
   });
 
+// === duplicate-literals command ===
+program
+  .command("duplicate-literals")
+  .alias("dupes")
+  .description(
+    "Find the same string/regex literal duplicated across >=2 files (AST-based)"
+  )
+  .argument("[paths...]", "Paths to search (files or directories)", ["."])
+  .option(
+    "--min-occurrences <number>",
+    "Minimum total occurrences to report",
+    "3"
+  )
+  .option(
+    "--min-files <number>",
+    "Minimum distinct files a literal must span",
+    "2"
+  )
+  .option(
+    "--min-length <number>",
+    "Minimum string length (strings only; regex bypasses)",
+    "8"
+  )
+  .option(
+    "--kind <kind>",
+    "Literal kind to report: string, regex, or all",
+    "all"
+  )
+  .option("--include <glob>", "File glob pattern to include")
+  .option(
+    "--exclude <glob...>",
+    "File glob patterns to exclude (repeatable)",
+    collect,
+    []
+  )
+  .option("--include-tests", "Include *.test.* / *.spec.* / __tests__ files")
+  .option(
+    "--check",
+    "Exit 1 if any duplicate meets the thresholds (for CI / pre-commit)"
+  )
+  .option("--format <format>", "Output format: text or json", "text")
+  .action((paths, opts) => {
+    const config = loadConfig(paths[0] || ".");
+    const result = findDuplicateLiterals(paths, mergeOptions(opts, config));
+    if (opts.format === "json") {
+      outputDuplicateLiteralsJson(result);
+    } else {
+      outputDuplicateLiteralsText(result);
+    }
+    if (opts.check && result.findings.length > 0) {
+      process.exit(1);
+    }
+  });
+
 // Handle --output-schema before parse to bypass required-option validation
 if (process.argv.includes("--output-schema")) {
-  const commands = ["colors", "tailwind", "compare", "patterns", "jsx"];
+  const commands = [
+    "colors",
+    "tailwind",
+    "compare",
+    "patterns",
+    "jsx",
+    "duplicate-literals",
+  ];
   const cmdName = process.argv.find((arg) => commands.includes(arg));
   if (cmdName) {
     const schema = getSchema(cmdName);

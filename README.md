@@ -55,6 +55,9 @@ hardcode-replacer patterns src/
 
 # Find repeated JSX structures for component extraction
 hardcode-replacer jsx src/
+
+# Find the same string/regex literal duplicated across files
+hardcode-replacer duplicate-literals src/ --check
 ```
 
 ---
@@ -263,6 +266,67 @@ Scanned 69 files. Found 89 clusters.
    → Extract into a reusable component. 5 identical instances found.
 ```
 
+### `duplicate-literals` — Find the same literal duplicated across files
+
+Finds the **same string or regex literal** copy-pasted into two or more source files — the cross-file drift class. A regex like `\bel-git\s+(?:mr|pr)\b` pasted into a dozen files that then diverge is invisible to the other commands; this one hoists it into view so you can single-source it.
+
+Unlike `patterns` / `jsx` (which use lightweight text/regex extraction), `duplicate-literals` parses each JS/TS/JSX/TSX file into a real **AST** (`@babel/parser`, loaded lazily so the color/CSS commands pay nothing for it). That's the whole point: an AST yields genuine `RegExpLiteral` nodes, so a regex like `/a\/b/g` is captured while a division expression `a / b` is not — a distinction text extraction gets wrong. Non-JS/TS files are out of scope and skipped; a file that fails to parse is skipped with a warning.
+
+```bash
+hardcode-replacer duplicate-literals [paths...] [options]
+hardcode-replacer dupes [paths...] [options]   # alias
+```
+
+**Options:**
+
+| Flag | Description |
+|------|-------------|
+| `--min-occurrences <n>` | Minimum total occurrences to report (default: 3) |
+| `--min-files <n>` | Minimum distinct files a literal must span (default: 2) |
+| `--min-length <n>` | Minimum string length; regex literals bypass this (default: 8) |
+| `--kind <string\|regex\|all>` | Which literal kinds to report (default: all) |
+| `--include <glob>` | File pattern to include |
+| `--exclude <glob>` | File pattern to exclude (repeatable) |
+| `--include-tests` | Include `*.test.*` / `*.spec.*` / `__tests__` files (skipped by default) |
+| `--check` | Exit with code `1` if any duplicate meets the thresholds |
+| `--format json` | Output as structured JSON |
+
+**Noise filtering:** skips literals shorter than `--min-length`, pure numbers, import/require source paths (values starting with `.`, `@`, `node:`, `~`), trivial tokens (`"use strict"`, `"utf-8"`, …), and **bare all-lowercase words** (`"background"`, `"className"`) — those carry no structure and are almost never drift-dangerous domain constants, unlike URLs, id patterns, command names, env-var names, or verdict tokens like `APPROVE`, which have separators / digits / mixed case. Regex literals bypass `--min-length` and the bare-word filter (a short shared regex is still drift-prone). Test files are skipped unless `--include-tests`. To tune further, raise `--min-length` or use `--kind regex`.
+
+A no-expression template `` `foo` `` and a plain string `"foo"` aggregate into one finding — they are the same literal *content* duplicated in different quote styles, which is exactly the drift this detects.
+
+**Canonical-source hint:** each finding includes a `suggestedSource` — where to single-source the literal. It prefers a file that already `export`s it (`export const NAME = <literal>`), then the file holding the most copies, then the shallowest path.
+
+**`--check` for CI / pre-commit:** unlike the other commands (which exit `1` only on errors), `duplicate-literals --check` exits `1` when any duplicate meets the thresholds, so you can fail a build or block a commit when new cross-file duplication appears:
+
+```bash
+# pre-commit hook or CI step
+hardcode-replacer duplicate-literals src/ --check --min-occurrences 3
+```
+
+**Example output:**
+
+```
+=== Duplicate Literals ===
+Found 2 literal(s) duplicated across files (6 locations, 48 files scanned)
+Criteria: kind=all, >=3 occurrences, >=2 files, min length 8
+
+1. [regex ] /\bel-git\s+(?:mr|pr)\b/
+   Occurrences: 12 across 12 file(s)
+   Single-source in: src/constants/patterns.ts:4 (exported)
+   Locations:
+     src/constants/patterns.ts:4:23 [exported]
+     src/checks/mr-open.ts:88:19
+     ...
+
+2. [string] https://api.example.com/v1/users
+   Occurrences: 3 across 3 file(s)
+   Single-source in: src/config/endpoints.ts:2 (shallowest)
+   Locations:
+     src/config/endpoints.ts:2:20
+     ...
+```
+
 ---
 
 ## Context Classification
@@ -335,6 +399,9 @@ hardcode-replacer patterns src/ --min-count 3 --min-classes 3
 
 # Step 7: Find repeated JSX structures for component extraction
 hardcode-replacer jsx src/ --min-depth 2
+
+# Step 8: Fail CI when the same literal is duplicated across files
+hardcode-replacer duplicate-literals src/ --check
 ```
 
 The `--format json` flag produces structured output suitable for programmatic consumption by AI tools. The text format is optimized for humans and for pasting into chat.
@@ -422,6 +489,7 @@ src/
     compare-vars.js         `compare` command (+ fix, baseline, diff)
     find-patterns.js        `patterns` command
     find-jsx.js             `jsx` command
+    find-duplicate-literals.js  `duplicate-literals` command (AST, @babel/parser)
 ```
 
 **Search**: Uses [ripgrep](https://github.com/BurntSushi/ripgrep) (`rg --json`) for fast structured search with grep fallback. All external commands use `execFileSync` (no shell) to prevent command injection.
@@ -444,7 +512,7 @@ npx hardcode-replacer colors src/
 
 - **Node.js >= 18**
 - **ripgrep** (`rg`) — recommended for performance, falls back to grep
-- **No other dependencies** — only `commander` for CLI parsing
+- **Minimal dependencies** — `commander` for CLI parsing; `@babel/parser` (loaded lazily, only by `duplicate-literals`)
 
 ---
 
@@ -474,6 +542,32 @@ if (violations.length > 0) {
 `isHexExemptPath` skips token source files (`/design-tokens/`, `/foundation.css`, …), fixture/test/stories paths, generated registries, and `tailwind.config`. Pass `extraFragments` to widen.
 
 **Used by:** `cli/el-hook` (verticalint/tools) write-time PreToolUse gate. The CLI `hardcode-replacer compare` remains the batch-sweep + fuzzy-match-to-vars + auto-fix path.
+
+---
+
+## Programmatic API (`hardcode-replacer/duplicate-literals`)
+
+The `duplicate-literals` detector is also exposed as a pure, in-process function so a caller (e.g. a verticalint/tools el-hook check) can gate on cross-file literal duplication without shelling out. It performs the analysis and **returns** the structured result — it does not print.
+
+```js
+const { findDuplicateLiterals } = require("hardcode-replacer/duplicate-literals");
+
+const result = findDuplicateLiterals(["src/"], {
+  minOccurrences: 3, // or "3" — parsed with parseInt
+  minFiles: 2,
+  minLength: 8,
+  kind: "all",       // "string" | "regex" | "all"
+  includeTests: false,
+  exclude: ["**/*.generated.*"],
+});
+
+// result.findings: Array<{ value, kind, occurrences, files, suggestedSource, locations }>
+if (result.findings.length > 0) {
+  // block / warn — each finding names where to single-source the literal
+}
+```
+
+`@babel/parser` is `require`d lazily inside this function, so importing the subpath is cheap until you call it. The full return shape is the `DuplicateLiteralsOutput` type printed by `hardcode-replacer duplicate-literals --output-schema`.
 
 ---
 

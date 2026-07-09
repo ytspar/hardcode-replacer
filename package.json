@@ -1,6 +1,6 @@
 {
   "name": "hardcode-replacer",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "CLI + programmatic library for finding hardcoded colors, Tailwind classes, and extractable patterns in codebases",
   "main": "src/cli.js",
   "bin": {
@@ -14,7 +14,8 @@
   ],
   "exports": {
     ".": "./src/cli.js",
-    "./detect": "./src/detect.js"
+    "./detect": "./src/detect.js",
+    "./duplicate-literals": "./src/commands/find-duplicate-literals.js"
   },
   "repository": {
     "type": "git",
@@ -39,6 +40,7 @@
   ],
   "license": "MIT",
   "dependencies": {
+    "@babel/parser": "^7.29.0",
     "commander": "^13.1.0"
   },
   "devDependencies": {

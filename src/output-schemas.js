@@ -176,6 +176,43 @@ type JsxLocation = {
   tag: string;
   classes: string[];
 };`,
+  "duplicate-literals": `type DuplicateLiteralsOutput = {
+  command: 'duplicate-literals';
+  summary: {
+    totalFindings: number;
+    minOccurrences: number;
+    minFiles: number;
+    minLength: number;
+    kind: 'string' | 'regex' | 'all';
+    scannedFiles: number;
+    skippedFiles: number;
+    totalLocations: number;
+  };
+  findings: DuplicateLiteral[];
+};
+
+type DuplicateLiteral = {
+  /** Raw string value, or /pattern/flags for a regex literal */
+  value: string;
+  kind: 'string' | 'regex';
+  occurrences: number;
+  files: number;
+  /** Where to single-source the literal */
+  suggestedSource: {
+    file: string;
+    line: number;
+    reason: 'exported' | 'most-shared' | 'shallowest';
+  };
+  locations: DuplicateLiteralLocation[];
+};
+
+type DuplicateLiteralLocation = {
+  file: string;
+  line: number;
+  column: number;
+  /** True when this occurrence is \`export const NAME = <literal>\` */
+  exported: boolean;
+};`,
 };
 
 function getSchema(commandName) {
