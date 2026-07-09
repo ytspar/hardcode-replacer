@@ -17,3 +17,5 @@ export function ratio(x, y) {
 
 // Second occurrence of the two-file-only string.
 export const twoFileOnlyB = "shared-two-files-only";
+
+export const bgB = "background";

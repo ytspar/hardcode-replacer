@@ -15,6 +15,14 @@ const QUOTE_MARKER = "['\"`]";
 const TEST_FILE_RE = /(\.(test|spec)\.[jt]sx?$)|(^|\/)__tests__\//;
 const PURE_NUMBER_RE = /^\d+(?:\.\d+)?$/;
 const IMPORT_PATH_PREFIX_RE = /^(?:\.|@|node:|~)/;
+// A bare all-lowercase word with no separators/digits/case ("background",
+// "className") is almost never a drift-dangerous domain constant — those carry
+// structure (a separator, digits, mixed/upper case): URLs, id patterns, command
+// names, env-var names, verdict tokens like APPROVE. Skipping pure lowercase
+// words cuts the bulk of a broad string scan's noise while keeping every real
+// shared constant. (Regex literals and `--include-tests` are unaffected; raise
+// `--min-length` or use `--kind regex` to tune further.)
+const BARE_LOWERCASE_WORD_RE = /^[a-z]+$/;
 
 // Trivial tokens that are duplicated everywhere but never worth single-sourcing.
 const TRIVIAL_LITERALS = new Set([
@@ -249,6 +257,11 @@ function collectLiterals(root, kindFilter) {
 /**
  * Classify a node as a collectable literal, or null. Only no-expression
  * TemplateLiterals count (a `${...}` template is a partial, not a literal).
+ *
+ * Note: a no-expression template `` `foo` `` and a plain string `"foo"` both
+ * yield `{ kind: "string", value: "foo" }`, so they aggregate into ONE finding.
+ * That is intentional — they are the same literal *content* duplicated, which is
+ * exactly the drift this detects (a value copy-pasted in mixed quote styles).
  */
 function literalFromNode(node) {
   if (node.type === "StringLiteral") {
@@ -379,6 +392,9 @@ function passesNoiseFilter(lit, minLength) {
     return false;
   }
   if (TRIVIAL_LITERALS.has(value.toLowerCase())) {
+    return false;
+  }
+  if (BARE_LOWERCASE_WORD_RE.test(value.trim())) {
     return false;
   }
   return true;

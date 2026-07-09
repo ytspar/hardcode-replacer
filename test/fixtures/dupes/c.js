@@ -11,3 +11,5 @@ export function quotient(x, y) {
 
 // Only present in this file — must NOT be reported.
 export const solo = "only-here-unique-1234";
+
+export const bgC = "background";

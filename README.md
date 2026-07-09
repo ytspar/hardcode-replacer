@@ -291,7 +291,9 @@ hardcode-replacer dupes [paths...] [options]   # alias
 | `--check` | Exit with code `1` if any duplicate meets the thresholds |
 | `--format json` | Output as structured JSON |
 
-**Noise filtering:** skips literals shorter than `--min-length`, pure numbers, import/require source paths (values starting with `.`, `@`, `node:`, `~`), and trivial tokens (`"use strict"`, `"utf-8"`, …). Test files are skipped unless `--include-tests`.
+**Noise filtering:** skips literals shorter than `--min-length`, pure numbers, import/require source paths (values starting with `.`, `@`, `node:`, `~`), trivial tokens (`"use strict"`, `"utf-8"`, …), and **bare all-lowercase words** (`"background"`, `"className"`) — those carry no structure and are almost never drift-dangerous domain constants, unlike URLs, id patterns, command names, env-var names, or verdict tokens like `APPROVE`, which have separators / digits / mixed case. Regex literals bypass `--min-length` and the bare-word filter (a short shared regex is still drift-prone). Test files are skipped unless `--include-tests`. To tune further, raise `--min-length` or use `--kind regex`.
+
+A no-expression template `` `foo` `` and a plain string `"foo"` aggregate into one finding — they are the same literal *content* duplicated in different quote styles, which is exactly the drift this detects.
 
 **Canonical-source hint:** each finding includes a `suggestedSource` — where to single-source the literal. It prefers a file that already `export`s it (`export const NAME = <literal>`), then the file holding the most copies, then the shallowest path.
 

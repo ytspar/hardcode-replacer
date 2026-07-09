@@ -122,6 +122,16 @@ describe("findDuplicateLiterals", () => {
     // "./util" is an import source and starts with "." — never reported.
     expect(findValue(result, "./util")).toBeUndefined();
   });
+
+  test("filters a bare lowercase word as non-drift noise, but keeps structured literals", () => {
+    const result = run();
+    // "background" appears 3x across 3 files and is >= minLength, so only the
+    // bare-lowercase-word heuristic can suppress it.
+    expect(findValue(result, "background")).toBeUndefined();
+    // Positive control: a structured literal (the endpoint URL) with the same
+    // spread IS still reported — the filter is precise, not blanket.
+    expect(findValue(result, "https://api.example.com/v1/users")).toBeTruthy();
+  });
 });
 
 describe("duplicate-literals CLI --check", () => {

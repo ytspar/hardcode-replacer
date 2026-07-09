@@ -17,3 +17,7 @@ export const twoFileOnly = "shared-two-files-only";
 export const oneA = "thrice-in-one-file-value";
 export const oneB = "thrice-in-one-file-value";
 export const oneC = "thrice-in-one-file-value";
+
+// A bare lowercase word (>= minLength, 3 files) — must be FILTERED as noise:
+// it carries no structure, so it is not a drift-dangerous domain constant.
+export const bgA = "background";
