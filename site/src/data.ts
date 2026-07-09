@@ -214,6 +214,13 @@ export const featureCards = [
     desc: "Find repeated JSX subtrees (tag hierarchies + classNames) for component extraction. Detects exact, structural, and similar duplicates.",
     cli: "hardcode-replacer jsx src/ --min-depth 2",
   },
+  {
+    command: "duplicate-literals",
+    color: "#ec4899",
+    title: "Duplicate Literals",
+    desc: "Find the same string or regex literal duplicated across files (AST-based, so /a\\/b/g is caught but a / b is not). --check fails CI on cross-file drift.",
+    cli: "hardcode-replacer duplicate-literals src/ --check",
+  },
 ];
 
 export const workflowSteps = [

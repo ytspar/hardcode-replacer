@@ -125,6 +125,32 @@ hardcode-replacer jsx src/
 hardcode-replacer jsx src/ --min-depth 2 --min-count 3 --format json
 ```
 
+### 6. Find duplicated literals across files
+```bash
+hardcode-replacer duplicate-literals [paths...] [options]
+hardcode-replacer dupes [paths...] [options]   # alias
+```
+Finds the **same string or regex literal** duplicated across >=2 source files — the cross-file drift class (a regex copy-pasted into a dozen files that then diverge). AST-based (`@babel/parser`, loaded lazily): it parses each JS/TS/JSX/TSX file and collects `StringLiteral`, no-expression `TemplateLiteral`, and `RegExpLiteral` nodes. This is why it beats the text-based commands on regex — `/a\/b/g` is captured while a division `a / b` is not. Non-JS/TS files are out of scope.
+
+Each finding carries a `suggestedSource` (where to single-source the literal: an existing `export const`, else the most-shared or shallowest path). Noise (short strings, pure numbers, import/require paths, trivial tokens like `"use strict"`) and test files are filtered by default.
+
+**Options:**
+- `--min-occurrences <n>` — minimum total occurrences (default: 3)
+- `--min-files <n>` — minimum distinct files spanned (default: 2)
+- `--min-length <n>` — minimum string length; regex bypasses (default: 8)
+- `--kind <string|regex|all>` — literal kind to report (default: all)
+- `--include-tests` — include `*.test.*` / `*.spec.*` / `__tests__`
+- `--check` — exit `1` if any duplicate meets the thresholds (for CI / pre-commit)
+
+**Examples:**
+```bash
+hardcode-replacer duplicate-literals src/
+hardcode-replacer dupes src/ --kind regex --format json
+hardcode-replacer duplicate-literals src/ --check   # non-zero exit gates CI
+```
+
+Also exposed programmatically: `require("hardcode-replacer/duplicate-literals").findDuplicateLiterals(paths, options)` returns the structured result (pure, no output) for in-process callers.
+
 ## Config File
 
 Create `.hardcode-replacerrc.json` in your project root for default settings:
@@ -176,6 +202,7 @@ This tool is designed for Claude to invoke via bash to efficiently scan codebase
 4. Run `hardcode-replacer tailwind src/ --vars path/to/theme.css` to find Tailwind color classes and arbitrary values matching the theme
 5. Run `hardcode-replacer patterns src/` to find repeated class patterns for extraction
 6. Run `hardcode-replacer jsx src/` to find repeated JSX structures for component extraction
+7. Run `hardcode-replacer duplicate-literals src/ --check` to fail CI when the same string/regex literal is duplicated across files
 
 The `--format json` flag produces structured output suitable for further processing.
 
@@ -190,4 +217,4 @@ The `--format json` flag produces structured output suitable for further process
 - `src/tailwind-colors.js` — Tailwind color names, prefixes, pattern builders, v4 detection
 - `src/context-classifier.js` — context classification (actionable vs non-actionable), multi-line comment detection
 - `src/output-schemas.js` — TypeScript type definitions for `--output-schema`
-- `src/commands/` — individual command handlers (find-colors, find-tailwind, compare-vars, find-patterns, find-jsx)
+- `src/commands/` — individual command handlers (find-colors, find-tailwind, compare-vars, find-patterns, find-jsx, find-duplicate-literals)
