@@ -1,4 +1,6 @@
 const path = require("node:path");
+const fs = require("node:fs");
+const os = require("node:os");
 const { execFileSync } = require("node:child_process");
 const {
   findDuplicateLiterals,
@@ -67,6 +69,32 @@ describe("findDuplicateLiterals", () => {
       expect(f.value).not.toContain("x / y");
       // The division tokens never form a regex-shaped finding.
       expect(f.value === "/ y/" || f.value === "/x /").toBe(false);
+    }
+  });
+
+  test("discovers a regex-only file with NO quotes (slash-delimited literal)", () => {
+    // Regression: file discovery must include `/` in its candidate marker, or a
+    // file whose only duplicated literal is a regex — with no quotes/backticks
+    // anywhere — is silently skipped and the whole finding is lost.
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "dupelit-regex-"));
+    try {
+      fs.writeFileSync(path.join(dir, "one.js"), "const re = /a\\/b/g;\n");
+      fs.writeFileSync(path.join(dir, "two.js"), "export const re2 = /a\\/b/g;\n");
+      const result = findDuplicateLiterals([dir], {
+        minOccurrences: "2",
+        minFiles: "2",
+        minLength: "8",
+        kind: "all",
+        exclude: [],
+      });
+      expect(result.summary.scannedFiles).toBe(2);
+      const rx = findValue(result, "/a\\/b/g");
+      expect(rx).toBeTruthy();
+      expect(rx.kind).toBe("regex");
+      expect(rx.occurrences).toBe(2);
+      expect(rx.files).toBe(2);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
     }
   });
 

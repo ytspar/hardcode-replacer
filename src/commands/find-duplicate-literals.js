@@ -6,11 +6,18 @@ const { search } = require("../search");
 const JS_TS_EXTS = ["js", "jsx", "ts", "tsx", "mjs", "cjs", "mts", "cts"];
 const DEFAULT_INCLUDE = `*.{${JS_TS_EXTS.join(",")}}`;
 
-// A source file that has any string, template, or regex literal necessarily
-// contains a quote or backtick, so this cheap ripgrep pass gives us the full
-// set of candidate files without walking the tree ourselves (and it honors the
-// same include/exclude globs the other commands use).
-const QUOTE_MARKER = "['\"`]";
+// A source file with any string/template/regex literal contains a quote, a
+// backtick, OR a `/` — regex literals are SLASH-delimited, not quoted. Including
+// `/` is load-bearing: a file whose only duplicated literal is a regex, with no
+// quotes anywhere, would otherwise be silently skipped and the finding lost
+// entirely (or a single quote-less participant could sink a real duplicate below
+// --min-files). This cheap ripgrep pass gives the full candidate set without
+// walking the tree, and honors the same include/exclude globs the other commands
+// use. Over-matching (comments/division also contain `/`) is harmless: discovery
+// is only a candidate filter — the AST does the real RegExpLiteral-vs-division
+// classification, so a slash-only file with no real literal is parsed and simply
+// yields nothing.
+const LITERAL_CANDIDATE_MARKER = "['\"`/]";
 
 const TEST_FILE_RE = /(\.(test|spec)\.[jt]sx?$)|(^|\/)__tests__\//;
 const PURE_NUMBER_RE = /^\d+(?:\.\d+)?$/;
@@ -182,7 +189,7 @@ function buildFindings(map, minOccurrences, minFiles) {
 // ---------------------------------------------------------------------------
 
 function discoverFiles(searchPaths, options, includeTests) {
-  const results = search(QUOTE_MARKER, searchPaths, {
+  const results = search(LITERAL_CANDIDATE_MARKER, searchPaths, {
     include: options.include || DEFAULT_INCLUDE,
     exclude: options.exclude,
     caseSensitive: true,
