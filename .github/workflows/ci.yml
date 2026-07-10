@@ -1,0 +1,24 @@
+# PR-time CI (PR #2 cycle-1 follow-up): run the test suite on every pull
+# request and on pushes to main, so a merge gate has a real pipeline to check
+# and test failures surface before merge rather than inside the publish run.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
