@@ -1,0 +1,106 @@
+# Push-to-publish (DEV-5890): every push to main where package.json's version
+# is not yet on the npm registry runs the test suite and publishes — the
+# version bump ships inside the feature PR, so a merged PR publishes with no
+# further human step. Exact-version check (`npm view <name>@<version>`) makes
+# re-runs and no-bump pushes clean no-ops, and a version revert can't
+# accidentally republish over an existing release.
+#
+# One-time setup per repo:
+#   1. On npmjs.com: Access Tokens → Generate New Token → Automation
+#      (bypasses 2FA for CI; scope it to this package if using a granular token).
+#   2. Add it as a repo Actions secret named NPM_TOKEN:
+#        gh secret set NPM_TOKEN --repo <owner>/<repo>
+# The workflow fails loudly (not silently) when a publish is due but the
+# secret is missing. `--provenance` attaches a build attestation linking the
+# published tarball to this workflow run.
+name: publish
+
+on:
+  push:
+    branches: [main]
+  # Manual re-run for catch-up (e.g. after adding NPM_TOKEN). Idempotent —
+  # a no-op when the current version is already published.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # npm --provenance attestation
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    # Ref guard (PR #2 cycle-1 blocker): workflow_dispatch can target any
+    # branch; without this, a manual dispatch from a feature branch would
+    # test + publish UNMERGED code. Publishing only ever happens from main.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+          cache: npm
+
+      - name: Decide whether this version needs publishing
+        id: version
+        run: |
+          NAME=$(node -p "require('./package.json').name")
+          LOCAL=$(node -p "require('./package.json').version")
+          # Strict shape checks (PR #2 cycle-1 hardening): NAME/LOCAL are
+          # interpolated into shell lines and $GITHUB_OUTPUT — reject anything
+          # that isn't a plain package name / semver before using them. Bash
+          # [[ =~ ]] anchors over the WHOLE string (grep -q would match
+          # per-line, letting a newline-injected value through).
+          if [[ ! "$NAME" =~ ^(@[a-z0-9~-][a-z0-9._~-]*/)?[a-z0-9~-][a-z0-9._~-]*$ ]]; then
+            echo "::error::package.json name has an unexpected shape; refusing to proceed."
+            exit 1
+          fi
+          if [[ ! "$LOCAL" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::package.json version is not a plain semver; refusing to proceed."
+            exit 1
+          fi
+          # A transient registry failure here misclassifies toward publishing,
+          # which is fail-safe: the registry rejects republishing an existing
+          # version, so the worst case is a red run, never an overwrite.
+          if npm view "${NAME}@${LOCAL}" version >/dev/null 2>&1; then
+            echo "::notice::${NAME}@${LOCAL} is already on the registry — nothing to publish."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::${NAME}@${LOCAL} is not on the registry — publishing."
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Require NPM_TOKEN when a publish is due
+        if: steps.version.outputs.publish == 'true'
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "$NPM_TOKEN" ]; then
+            echo "::error::A publish is due but the NPM_TOKEN repo secret is not set." \
+                 "Mint an npm Automation token (npmjs.com → Access Tokens) and run:" \
+                 "gh secret set NPM_TOKEN --repo ${GITHUB_REPOSITORY}"
+            exit 1
+          fi
+
+      - name: Install ripgrep (search layer primary path; grep fallback has a known bug)
+        if: steps.version.outputs.publish == 'true'
+        run: sudo apt-get update -q && sudo apt-get install -y -q ripgrep
+
+      - name: Install
+        if: steps.version.outputs.publish == 'true'
+        run: npm ci
+
+      - name: Test
+        if: steps.version.outputs.publish == 'true'
+        run: npm test
+
+      - name: Publish
+        if: steps.version.outputs.publish == 'true'
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

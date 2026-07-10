@@ -1,0 +1,28 @@
+# PR-time CI (PR #2 cycle-1 follow-up): run the test suite on every pull
+# request and on pushes to main, so a merge gate has a real pipeline to check
+# and test failures surface before merge rather than inside the publish run.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      # The search layer prefers ripgrep; GitHub runners do not ship it, and
+      # the grep fallback has a known ERE-compat bug (see repo issue: grep
+      # fallback broken, #3) — install rg so CI exercises the primary path.
+      - run: sudo apt-get update -q && sudo apt-get install -y -q ripgrep
+      - run: npm ci
+      - run: npm test

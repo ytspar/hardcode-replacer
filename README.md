@@ -578,6 +578,14 @@ PRs welcome! If you find false positives or missed patterns, please open an issu
 2. The line of code it appeared in
 3. The file context (imports, file path)
 
+## Releasing
+
+Publishing is automated (`.github/workflows/publish.yml`): bump `version` in
+`package.json` inside your PR; when it merges to `main`, CI verifies the
+version is not yet on the registry, runs the test suite, and publishes with
+provenance. No local npm credentials are needed. One-time repo setup: an npm
+Automation token stored as the `NPM_TOKEN` Actions secret.
+
 ---
 
 ## License
