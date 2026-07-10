@@ -20,5 +20,9 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      # The search layer prefers ripgrep; GitHub runners do not ship it, and
+      # the grep fallback has a known ERE-compat bug (see repo issue: grep
+      # fallback broken, #3) — install rg so CI exercises the primary path.
+      - run: sudo apt-get update -q && sudo apt-get install -y -q ripgrep
       - run: npm ci
       - run: npm test

@@ -87,6 +87,10 @@ jobs:
             exit 1
           fi
 
+      - name: Install ripgrep (search layer primary path; grep fallback has a known bug)
+        if: steps.version.outputs.publish == 'true'
+        run: sudo apt-get update -q && sudo apt-get install -y -q ripgrep
+
       - name: Install
         if: steps.version.outputs.publish == 'true'
         run: npm ci
