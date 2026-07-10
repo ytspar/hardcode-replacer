@@ -1,30 +1,41 @@
-# Push-to-publish (DEV-5890): every push to main where package.json's version
-# is not yet on the npm registry runs the test suite and publishes — the
-# version bump ships inside the feature PR, so a merged PR publishes with no
-# further human step. Exact-version check (`npm view <name>@<version>`) makes
-# re-runs and no-bump pushes clean no-ops, and a version revert can't
-# accidentally republish over an existing release.
+# Push-to-publish via npm Trusted Publishing / OIDC (DEV-5890): every push to
+# main where package.json's version is not yet on the registry runs the test
+# suite and publishes — the version bump ships inside the feature PR, so a
+# merged PR publishes with no further human step. Exact-version check
+# (`npm view <name>@<version>`) makes re-runs and no-bump pushes clean no-ops,
+# and a version revert can't accidentally republish over an existing release.
 #
-# One-time setup per repo:
-#   1. On npmjs.com: Access Tokens → Generate New Token → Automation
-#      (bypasses 2FA for CI; scope it to this package if using a granular token).
-#   2. Add it as a repo Actions secret named NPM_TOKEN:
-#        gh secret set NPM_TOKEN --repo <owner>/<repo>
-# The workflow fails loudly (not silently) when a publish is due but the
-# secret is missing. `--provenance` attaches a build attestation linking the
-# published tarball to this workflow run.
+# NO NPM TOKEN. Auth is npm Trusted Publishing (OIDC): GitHub Actions mints a
+# short-lived, workflow-scoped OIDC token that npm exchanges for publish rights,
+# so there is no long-lived secret to store, rotate, or leak. (npm retired the
+# classic Automation token in the 2025 token overhaul; OIDC is the replacement.)
+#
+# One-time setup per package (npmjs.com, package owner):
+#   Package → Settings → Trusted Publisher → GitHub Actions, with:
+#     Organization/user:  ytspar
+#     Repository:         <this repo>
+#     Workflow filename:  publish.yml
+#   (leave Environment blank — this workflow uses none). Optionally then enable
+#   "Require two-factor authentication and disallow tokens" for defense in depth
+#   — OIDC keeps working, and no token can be used as an alternate path.
+#
+# Requirements the steps below satisfy: npm CLI >= 11.5.1 (Node 22 ships npm
+# 10.x, so npm is upgraded explicitly) and Node >= 22.14. Provenance is
+# generated automatically for a public repo + public package; `--provenance`
+# is passed explicitly as belt-and-suspenders.
 name: publish
 
 on:
   push:
     branches: [main]
-  # Manual re-run for catch-up (e.g. after adding NPM_TOKEN). Idempotent —
-  # a no-op when the current version is already published.
+  # Manual re-run for catch-up (e.g. right after configuring the trusted
+  # publisher). Idempotent — a no-op when the current version is already
+  # published.
   workflow_dispatch:
 
 permissions:
   contents: read
-  id-token: write # npm --provenance attestation
+  id-token: write # OIDC token for Trusted Publishing (and provenance)
 
 concurrency:
   group: publish
@@ -75,19 +86,13 @@ jobs:
             echo "publish=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Require NPM_TOKEN when a publish is due
+      - name: Upgrade npm to a Trusted-Publishing-capable version (>= 11.5.1)
         if: steps.version.outputs.publish == 'true'
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          if [ -z "$NPM_TOKEN" ]; then
-            echo "::error::A publish is due but the NPM_TOKEN repo secret is not set." \
-                 "Mint an npm Automation token (npmjs.com → Access Tokens) and run:" \
-                 "gh secret set NPM_TOKEN --repo ${GITHUB_REPOSITORY}"
-            exit 1
-          fi
+          npm install -g npm@latest
+          echo "npm $(npm --version), node $(node --version)"
 
-      - name: Install ripgrep (search layer primary path; grep fallback has a known bug)
+      - name: Install ripgrep (search layer primary path; grep fallback has a known bug, #3)
         if: steps.version.outputs.publish == 'true'
         run: sudo apt-get update -q && sudo apt-get install -y -q ripgrep
 
@@ -99,8 +104,10 @@ jobs:
         if: steps.version.outputs.publish == 'true'
         run: npm test
 
-      - name: Publish
+      # No NODE_AUTH_TOKEN: npm detects the GitHub Actions OIDC environment
+      # (id-token: write) and exchanges it for publish rights via the package's
+      # configured trusted publisher. Fails loudly if the trusted publisher is
+      # not yet configured on npmjs.com (see the one-time setup in the header).
+      - name: Publish (Trusted Publishing / OIDC)
         if: steps.version.outputs.publish == 'true'
         run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
