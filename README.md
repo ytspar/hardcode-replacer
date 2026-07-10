@@ -583,8 +583,14 @@ PRs welcome! If you find false positives or missed patterns, please open an issu
 Publishing is automated (`.github/workflows/publish.yml`): bump `version` in
 `package.json` inside your PR; when it merges to `main`, CI verifies the
 version is not yet on the registry, runs the test suite, and publishes with
-provenance. No local npm credentials are needed. One-time repo setup: an npm
-Automation token stored as the `NPM_TOKEN` Actions secret.
+provenance. No npm token — auth is **npm Trusted Publishing (OIDC)**: GitHub
+Actions mints a short-lived, workflow-scoped token that npm exchanges for
+publish rights, so there is no secret to store or rotate.
+
+One-time setup (package owner, npmjs.com): the package's **Settings → Trusted
+Publisher → GitHub Actions**, pointing at this repo and the `publish.yml`
+workflow (no environment). Optionally then enable "require 2FA and disallow
+tokens" for defense in depth.
 
 ---
 
