@@ -1,6 +1,6 @@
 {
   "name": "hardcode-replacer",
-  "version": "2.3.0",
+  "version": "2.3.1",
   "description": "CLI + programmatic library for finding hardcoded colors, Tailwind classes, and extractable patterns in codebases",
   "main": "src/cli.js",
   "bin": {

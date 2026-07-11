@@ -189,10 +189,15 @@ function buildFindings(map, minOccurrences, minFiles) {
 // ---------------------------------------------------------------------------
 
 function discoverFiles(searchPaths, options, includeTests) {
+  // filesOnly: we only need the SET of candidate files here, not per-match
+  // rows — using `-l`/`-rl` keeps discovery bounded on a large monorepo (the
+  // full `--json` output overflowed the child-process buffer and silently
+  // returned nothing, so the whole command scanned zero files).
   const results = search(LITERAL_CANDIDATE_MARKER, searchPaths, {
     include: options.include || DEFAULT_INCLUDE,
     exclude: options.exclude,
     caseSensitive: true,
+    filesOnly: true,
   });
 
   const fileSet = new Set();

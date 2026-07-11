@@ -1,7 +1,7 @@
 
 
 const path = require('node:path');
-const { search } = require('../src/search');
+const { search, isMaxBufferError, parseFilesList, MAX_STDOUT_BUFFER } = require('../src/search');
 
 const FIXTURES = path.join(__dirname, 'fixtures');
 
@@ -74,5 +74,52 @@ describe('search', () => {
     const _hasLower = results.some(r => /[a-f]/.test(r.text));
     // At minimum we should get results
     expect(results.length).toBeGreaterThanOrEqual(0);
+  });
+
+  // Regression: on a large tree the verbose --json output overflowed the
+  // child-process buffer and the error (no `.status`) was swallowed into a
+  // `return []`, so a scan that found matches reported none — the bug that
+  // made `duplicate-literals` scan zero files on a monorepo.
+  describe('filesOnly discovery + overflow safety', () => {
+    test('filesOnly returns one row per matching file (no per-match duplication)', () => {
+      const dir = path.join(FIXTURES, 'dupes');
+      const rows = search("['\"`/]", [dir], { filesOnly: true, caseSensitive: true });
+      const files = new Set(rows.map((r) => r.file));
+      // Every returned row is unique-per-file (files-with-matches), not per match.
+      expect(rows.length).toBe(files.size);
+      // The dupes fixture has multiple source files, all discovered.
+      expect(files.size).toBeGreaterThanOrEqual(2);
+      // filesOnly rows carry the file but no line/text payload.
+      for (const r of rows) {
+        expect(r).toHaveProperty('file');
+        expect(r.line).toBe(0);
+        expect(r.text).toBe('');
+      }
+    });
+
+    test('filesOnly still discovers the same file SET as a full match search', () => {
+      const dir = path.join(FIXTURES, 'dupes');
+      const full = new Set(search("['\"`/]", [dir], { caseSensitive: true }).map((r) => r.file));
+      const only = new Set(search("['\"`/]", [dir], { filesOnly: true, caseSensitive: true }).map((r) => r.file));
+      expect(only).toEqual(full);
+    });
+
+    test('isMaxBufferError recognises a stdout-overflow error (never mistaken for "no matches")', () => {
+      expect(isMaxBufferError({ code: 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER' })).toBe(true);
+      expect(isMaxBufferError({ message: 'stdout maxBuffer length exceeded' })).toBe(true);
+      // A no-match exit (status 1) is NOT an overflow — it stays a legit empty result.
+      expect(isMaxBufferError({ status: 1 })).toBe(false);
+      expect(isMaxBufferError(null)).toBeFalsy();
+    });
+
+    test('MAX_STDOUT_BUFFER is raised well above the old 50MB cap', () => {
+      expect(MAX_STDOUT_BUFFER).toBeGreaterThan(50 * 1024 * 1024);
+    });
+
+    test('parseFilesList trims, drops blanks, and shapes discovery rows', () => {
+      const rows = parseFilesList('a.js\n  b/c.ts  \n\n');
+      expect(rows.map((r) => r.file)).toEqual(['a.js', 'b/c.ts']);
+      expect(rows[0]).toEqual({ file: 'a.js', line: 0, column: 0, match: '', text: '' });
+    });
   });
 });
