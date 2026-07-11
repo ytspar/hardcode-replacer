@@ -3,6 +3,37 @@ const { DEFAULT_FILE_TYPES } = require("./color-patterns");
 
 const GREP_LINE_RE = /^(.+?):(\d+):(.*)$/;
 
+// Child-process stdout buffer cap. ripgrep's `--json` output is verbose (one
+// JSON object per submatch), so a whole-monorepo scan of a common marker can
+// run to hundreds of MB. The old 50MB cap silently overflowed on large trees:
+// execFileSync throws ERR_CHILD_PROCESS_STDIO_MAXBUFFER, whose error carries
+// no `.status`, so it fell through the `err.status` checks to a `return []` —
+// a scan that found everything reported as finding NOTHING (a hollow result;
+// the exact trap that made `duplicate-literals` scan zero files on a large
+// repo). Raised here as defense, and — crucially — overflow now THROWS loudly
+// (see the catch blocks) instead of returning []. For pure file discovery,
+// prefer `filesOnly` (below), which emits only filenames and never overflows.
+const MAX_STDOUT_BUFFER = 256 * 1024 * 1024;
+
+/**
+ * True when `err` is the Node child-process stdout-overflow error. Such an
+ * error has no `.status` (it's not a non-zero exit), so it must be recognised
+ * explicitly — otherwise it masquerades as "no matches" and silently zeroes a
+ * scan.
+ */
+function isMaxBufferError(err) {
+  return err && (err.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER" || /maxBuffer/i.test(err.message || ""));
+}
+
+/** Newline-separated `rg -l` / `grep -rl` output → discovery rows (file only). */
+function parseFilesList(output) {
+  return output
+    .split("\n")
+    .map((f) => f.trim())
+    .filter(Boolean)
+    .map((file) => ({ file, line: 0, column: 0, match: "", text: "" }));
+}
+
 // Check if ripgrep is available (memoized)
 let _hasRipgrep = null;
 function hasRipgrep() {
@@ -27,8 +58,16 @@ function hasRipgrep() {
 function searchWithRipgrep(pattern, paths, options = {}) {
   const args = [];
 
-  // Output format: JSON for structured parsing
-  args.push("--json");
+  // filesOnly: emit only the names of files that contain a match (`-l`), not
+  // per-match JSON. Discovery callers (which only need the file set) use this
+  // to stay bounded on huge trees; the output is one path per line.
+  const filesOnly = options.filesOnly === true;
+  if (filesOnly) {
+    args.push("-l");
+  } else {
+    // Output format: JSON for structured parsing
+    args.push("--json");
+  }
 
   // Case insensitive by default for color matching
   if (options.caseSensitive !== true) {
@@ -79,21 +118,32 @@ function searchWithRipgrep(pattern, paths, options = {}) {
   try {
     const result = execFileSync("rg", args, {
       encoding: "utf-8",
-      maxBuffer: 50 * 1024 * 1024, // 50MB buffer
+      maxBuffer: MAX_STDOUT_BUFFER,
       stdio: ["pipe", "pipe", "pipe"],
     });
 
-    return parseRipgrepJson(result);
+    return filesOnly ? parseFilesList(result) : parseRipgrepJson(result);
   } catch (err) {
-    // ripgrep exits with code 1 when no matches found
+    // ripgrep exits with code 1 when no matches found — a real empty result.
     if (err.status === 1) {
       return [];
     }
-    // Exit code 2 means error
+    // Exit code 2 means a ripgrep error (bad glob, unreadable path, …).
     if (err.status === 2) {
       throw new Error(`ripgrep error: ${err.stderr || err.message}`);
     }
-    return [];
+    // Output overflowed the buffer: DO NOT silently return [] (that would
+    // report a scan that found matches as finding none). Fail loudly with an
+    // actionable hint.
+    if (isMaxBufferError(err)) {
+      throw new Error(
+        `ripgrep output exceeded the ${Math.round(MAX_STDOUT_BUFFER / (1024 * 1024))}MB buffer for pattern ${JSON.stringify(
+          pattern,
+        )}. Narrow the search paths, or pass { filesOnly: true } for discovery.`,
+      );
+    }
+    // Any other unexpected failure is surfaced, never swallowed.
+    throw new Error(`ripgrep failed: ${err.stderr || err.message}`);
   }
 }
 
@@ -138,7 +188,10 @@ function parseRipgrepJson(output) {
  */
 function searchWithGrep(pattern, paths, options = {}) {
   const searchPaths = paths.length > 0 ? paths : ["."];
-  const args = ["-rn", "-E"];
+  // filesOnly → `-rl` (recurse, list files only); otherwise `-rn` (with line
+  // numbers) for full match rows.
+  const filesOnly = options.filesOnly === true;
+  const args = filesOnly ? ["-rlE"] : ["-rnE"];
 
   if (options.caseSensitive !== true) {
     args.push("-i");
@@ -165,14 +218,22 @@ function searchWithGrep(pattern, paths, options = {}) {
   try {
     const result = execFileSync("grep", args, {
       encoding: "utf-8",
-      maxBuffer: 50 * 1024 * 1024,
+      maxBuffer: MAX_STDOUT_BUFFER,
       stdio: ["pipe", "pipe", "pipe"],
     });
 
-    return parseGrepOutput(result);
+    return filesOnly ? parseFilesList(result) : parseGrepOutput(result);
   } catch (err) {
+    // grep exits 1 when there are no matches — a real empty result.
     if (err.status === 1) {
       return [];
+    }
+    if (isMaxBufferError(err)) {
+      throw new Error(
+        `grep output exceeded the ${Math.round(MAX_STDOUT_BUFFER / (1024 * 1024))}MB buffer for pattern ${JSON.stringify(
+          pattern,
+        )}. Narrow the search paths, or pass { filesOnly: true } for discovery.`,
+      );
     }
     throw new Error(`grep error: ${err.stderr || err.message}`);
   }
@@ -211,4 +272,4 @@ function search(pattern, paths = [], options = {}) {
   return searchWithGrep(pattern, paths, options);
 }
 
-module.exports = { search };
+module.exports = { search, isMaxBufferError, parseFilesList, MAX_STDOUT_BUFFER };
